@@ -1,0 +1,46 @@
+name: "analysis-agent"
+version: "1.0.0"
+description: "Analyze text content and provide insights"
+author: "agentplug"
+license: "MIT"
+python_version: "3.11+"
+
+interface:
+  methods:
+    analyze_text:
+      description: "Analyze text and provide insights"
+      parameters:
+        text:
+          type: "string"
+          description: "Text content to analyze"
+          required: true
+        analysis_type:
+          type: "string"
+          description: "Type of analysis (sentiment, key_points, summary)"
+          required: false
+          default: "general"
+      returns:
+        type: "object"
+        description: "Analysis results with insights"
+    
+    summarize_content:
+      description: "Create a summary of content"
+      parameters:
+        content:
+          type: "string"
+          description: "Content to summarize"
+          required: true
+        max_length:
+          type: "integer"
+          description: "Maximum summary length"
+          required: false
+          default: 200
+      returns:
+        type: "string"
+        description: "Summarized content"
+
+dependencies: 
+  - "aisuite[openai]>=0.1.7"
+  - "python-dotenv>=1.0.0"
+
+tags: ["text-analysis", "insights", "ai-assistant"]

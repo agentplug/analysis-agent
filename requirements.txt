@@ -1,0 +1,3 @@
+aisuite[openai]>=0.1.7
+python-dotenv>=1.0.0
+docstring-parser>=0.17.0
