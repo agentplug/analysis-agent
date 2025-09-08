@@ -71,9 +71,21 @@ Examples: {', '.join(examples)}
 """)
         
         return f"""
-You have access to the following tools. Use them when appropriate to enhance your analysis:
+You have access to the following tools. CRITICAL RULE: You MUST use the tools for ALL mathematical operations that match your available tools. Do NOT calculate anything manually.
 
 {''.join(tool_descriptions)}
+
+MANDATORY RULES:
+1. If text asks for multiplication and you have "multiply" tool → USE IT
+2. If text asks for addition and you have "add" tool → USE IT  
+3. If text has multiple operations → PERFORM THEM STEP BY STEP
+4. NEVER calculate manually if you have the corresponding tool
+5. Always use tools for ALL calculations, even simple ones
+
+For multi-step calculations like "multiply 12 by 5, then add 8":
+- FIRST: Use multiply tool for 12 × 5  
+- The system will execute this and give you the result
+- THEN: You'll be asked to continue with the next step
 
 To use a tool, respond with a JSON object containing:
 {{
@@ -81,10 +93,20 @@ To use a tool, respond with a JSON object containing:
         "tool_name": "tool_name",
         "arguments": {{"param1": "value1", "param2": "value2"}}
     }},
-    "analysis": "Your analysis of the results"
+    "analysis": "I will use the tool to perform this calculation"
 }}
 
-If you don't need tools, respond normally with your analysis.
+EXAMPLES:
+- "Calculate 6 times 7" → {{"tool_call": {{"tool_name": "multiply", "arguments": {{"a": "6", "b": "7"}}}}}}
+- "Add 5 and 3" → {{"tool_call": {{"tool_name": "add", "arguments": {{"a": "5", "b": "3"}}}}}}  
+- "Calculate 12 times 5, then add 8" → {{"tool_call": {{"tool_name": "multiply", "arguments": {{"a": "12", "b": "5"}}}}}}
+
+IMPORTANT: For text like "Calculate 12 times 5, then add 8", you should:
+1. First respond with multiply tool call
+2. When you get the result (60), the system will continue the conversation
+3. Then you'll use the add tool to add 8 to that result
+
+REMEMBER: If you can use a tool, you MUST use it. Do not calculate manually.
 """
     
     def _process_ai_response(self, response: str, analysis_type: str) -> Dict[str, Any]:
@@ -143,7 +165,7 @@ If you don't need tools, respond normally with your analysis.
     
     def _extract_tool_calls(self, response: str) -> List[Dict[str, Any]]:
         """
-        Extract tool calls from AI response.
+        Extract tool calls from AI response with detailed logging.
         
         Args:
             response: AI response string to parse
@@ -151,28 +173,50 @@ If you don't need tools, respond normally with your analysis.
         Returns:
             List of tool call dictionaries
         """
+        print("🔍 AGENT TOOL SELECTION: Analyzing AI response for tool calls...")
+        print(f"   📝 Response length: {len(response)} characters")
+        
         tool_calls = []
         
         # First, try to parse the entire response as JSON
         try:
             full_response = json.loads(response)
             if "tool_call" in full_response:
-                tool_calls.append(full_response["tool_call"])
+                tool_call = full_response["tool_call"]
+                print(f"   ✅ Found tool call in JSON: {tool_call}")
+                tool_calls.append(tool_call)
                 return tool_calls
         except json.JSONDecodeError:
-            pass
+            print("   📋 Response is not pure JSON, searching for embedded tool calls...")
+        
+        # Check for JSON wrapped in markdown code blocks
+        import re
+        json_pattern = r'```json\s*(\{.*?\})\s*```'
+        json_matches = re.findall(json_pattern, response, re.DOTALL)
+        for json_match in json_matches:
+            try:
+                json_obj = json.loads(json_match)
+                if "tool_call" in json_obj:
+                    tool_call = json_obj["tool_call"]
+                    print(f"   ✅ Found tool call in markdown JSON: {tool_call}")
+                    tool_calls.append(tool_call)
+            except json.JSONDecodeError:
+                continue
         
         # Look for JSON objects containing tool_call in the response
         # Use a more flexible approach to find JSON objects
         lines = response.split('\n')
-        for line in lines:
+        for i, line in enumerate(lines):
             line = line.strip()
             if '"tool_call"' in line:
+                print(f"   🔍 Found 'tool_call' in line {i+1}: {line[:100]}...")
                 try:
                     # Try to parse the line as JSON
                     obj = json.loads(line)
                     if "tool_call" in obj:
-                        tool_calls.append(obj["tool_call"])
+                        tool_call = obj["tool_call"]
+                        print(f"   ✅ Extracted tool call: {tool_call}")
+                        tool_calls.append(tool_call)
                 except json.JSONDecodeError:
                     # If the line isn't complete JSON, try to find JSON within it
                     json_pattern = r'\{[^{}]*"tool_call"[^{}]*\}'
@@ -181,9 +225,16 @@ If you don't need tools, respond normally with your analysis.
                         try:
                             tool_call_obj = json.loads(match)
                             if "tool_call" in tool_call_obj:
-                                tool_calls.append(tool_call_obj["tool_call"])
+                                tool_call = tool_call_obj["tool_call"]
+                                print(f"   ✅ Extracted tool call from pattern: {tool_call}")
+                                tool_calls.append(tool_call)
                         except json.JSONDecodeError:
                             continue
+        
+        print(f"🎯 TOOL SELECTION RESULT: Found {len(tool_calls)} tool calls")
+        for i, tool_call in enumerate(tool_calls, 1):
+            print(f"   {i}. Tool: {tool_call.get('tool_name', 'unknown')}")
+            print(f"      Args: {tool_call.get('arguments', {})}")
         
         return tool_calls
     
@@ -216,30 +267,40 @@ If you don't need tools, respond normally with your analysis.
     
     def _validate_tool_call(self, tool_call: Dict[str, Any]) -> bool:
         """
-        Validate tool call structure.
+        Validate tool call structure and ensure tool is in assigned tools list.
         
         Args:
             tool_call: Tool call dictionary to validate
             
         Returns:
-            True if tool call is valid, False otherwise
+            True if tool call is valid and allowed, False otherwise
         """
         if not isinstance(tool_call, dict):
+            print(f"❌ Invalid tool call: not a dictionary")
             return False
         
         if "tool_name" not in tool_call:
+            print(f"❌ Invalid tool call: missing 'tool_name'")
             return False
         
         if not isinstance(tool_call["tool_name"], str):
+            print(f"❌ Invalid tool call: 'tool_name' must be string")
             return False
         
-        if tool_call["tool_name"] not in self.available_tools:
+        tool_name = tool_call["tool_name"]
+        
+        # CRITICAL: Ensure tool is in the assigned tools list
+        if tool_name not in self.available_tools:
+            print(f"❌ UNAUTHORIZED TOOL ACCESS: '{tool_name}' is not in assigned tools: {self.available_tools}")
             return False
         
+        # Validate arguments structure
         if "arguments" in tool_call:
             if not isinstance(tool_call["arguments"], dict):
+                print(f"❌ Invalid tool call: 'arguments' must be dictionary")
                 return False
         
+        print(f"✅ Tool call validated: '{tool_name}' is authorized")
         return True
     
     def _execute_tools_and_analyze(self, tool_calls: List[Dict[str, Any]], text: str, analysis_type: str, client, messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -261,6 +322,7 @@ If you don't need tools, respond normally with your analysis.
             tool_results = []
             for tool_call in tool_calls:
                 tool_result = self._execute_single_tool(tool_call)
+                print(f"\033[91m🔧 AGENT TOOL EXECUTION: Tool result: {tool_result}\033[0m")
                 tool_results.append({
                     "tool_name": tool_call["tool_name"],
                     "arguments": tool_call.get("arguments", {}),
@@ -318,6 +380,7 @@ Use this information to enhance your analysis and provide more accurate, up-to-d
     def _execute_single_tool(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a single tool call using real MCP tool execution.
+        ENFORCES TOOL ASSIGNMENT LIMITS with detailed logging.
         
         Args:
             tool_call: Tool call dictionary with tool_name and arguments
@@ -328,9 +391,29 @@ Use this information to enhance your analysis and provide more accurate, up-to-d
         tool_name = tool_call["tool_name"]
         arguments = tool_call.get("arguments", {})
         
+        print(f"🔧 AGENT TOOL EXECUTION: Starting execution of '{tool_name}'")
+        print(f"   📝 Arguments: {arguments}")
+        print(f"   🔐 Available tools: {self.available_tools}")
+        
+        # CRITICAL SECURITY CHECK: Double-verify tool is authorized
+        if tool_name not in self.available_tools:
+            print(f"   ❌ AUTHORIZATION FAILED: Tool '{tool_name}' not in assigned tools")
+            return {
+                "success": False,
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "error": f"UNAUTHORIZED: Tool '{tool_name}' is not in assigned tools list: {self.available_tools}"
+            }
+        
+        print(f"   ✅ AUTHORIZATION PASSED: Tool '{tool_name}' is authorized")
+        
         try:
+            print(f"   🚀 EXECUTING: Calling MCP server for '{tool_name}'...")
             # Execute real tools by calling MCP server
             result = self._call_mcp_tool(tool_name, arguments)
+            print(f"   ✅ EXECUTION SUCCESS: Got result from '{tool_name}'")
+            print(f"   📊 Result: {result}")
+            
             return {
                 "success": True,
                 "tool_name": tool_name,
@@ -338,6 +421,7 @@ Use this information to enhance your analysis and provide more accurate, up-to-d
                 "result": result
             }
         except Exception as e:
+            print(f"   ❌ EXECUTION FAILED: Error in '{tool_name}': {str(e)}")
             return {
                 "success": False,
                 "tool_name": tool_name,
@@ -347,7 +431,7 @@ Use this information to enhance your analysis and provide more accurate, up-to-d
     
     def _call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """
-        Call MCP tool server to execute the tool.
+        Call MCP tool server using proper SSE format to execute any tool.
         
         Args:
             tool_name: Name of the tool to execute
@@ -356,52 +440,56 @@ Use this information to enhance your analysis and provide more accurate, up-to-d
         Returns:
             Tool execution result
         """
-        import httpx
         import asyncio
         
-        async def execute_tool():
+        async def execute_tool_via_sse():
             try:
-                # Connect to MCP server and execute tool
-                async with httpx.AsyncClient() as client:
-                    # Create MCP call payload
-                    payload = {
-                        "method": "tools/call",
-                        "params": {
-                            "name": tool_name,
-                            "arguments": arguments
-                        }
-                    }
-                    
-                    # Call MCP server
-                    response = await client.post(
-                        "http://localhost:8000/call_tool",
-                        json=payload,
-                        timeout=30.0
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        return result.get("result", result)
-                    else:
-                        raise Exception(f"MCP server returned {response.status_code}: {response.text}")
+                # Import MCP SSE client components
+                from mcp import ClientSession
+                from mcp.client.sse import sse_client
+                
+                # Connect to MCP server using SSE format
+                async with sse_client(url="http://localhost:8000/sse") as streams:
+                    async with ClientSession(*streams) as session:
+                        # Initialize the session
+                        await session.initialize()
                         
+                        # Call the tool using proper MCP format
+                        result = await session.call_tool(tool_name, arguments=arguments)
+                        
+                        # Extract result content
+                        if hasattr(result, 'content') and result.content:
+                            if hasattr(result.content[0], 'text'):
+                                return result.content[0].text
+                            else:
+                                return str(result.content[0])
+                        else:
+                            return str(result)
+                            
+            except ImportError as e:
+                # MCP not available, fallback to local execution
+                raise Exception(f"MCP not available: {e}")
             except Exception as e:
-                # Fallback to simple execution for basic tools
-                return self._execute_tool_locally(tool_name, arguments)
+                # Connection or execution error, fallback to local execution
+                raise Exception(f"MCP execution failed: {e}")
         
-        # Handle async execution
+        # Handle async execution in agent context
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're in an async context, use run_in_executor
+            # Check if we're already in an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an event loop, use run_in_executor to avoid blocking
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, execute_tool())
+                    future = executor.submit(asyncio.run, execute_tool_via_sse())
                     return future.result(timeout=30)
-            else:
-                return asyncio.run(execute_tool())
-        except Exception:
-            # Final fallback to local execution
+            except RuntimeError:
+                # No event loop running, safe to use asyncio.run()
+                return asyncio.run(execute_tool_via_sse())
+                
+        except Exception as e:
+            # If MCP fails, fall back to local execution
+            print(f"MCP tool execution failed, using local fallback: {e}")
             return self._execute_tool_locally(tool_name, arguments)
     
     def _execute_tool_locally(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
@@ -584,7 +672,7 @@ Use this information to enhance your analysis and provide more accurate, up-to-d
             "note": f"Generic execution with parameters: {arg_summary}",
             "tool_type": "unknown",
             "capability": "This tool can be used with any arguments you provide"
-        }
+            }
     
     def _build_tool_results_context(self, tool_results: List[Dict[str, Any]]) -> str:
         """
@@ -621,6 +709,7 @@ Error: {result['result'].get('error', 'Unknown error')}
     def analyze_text(self, text: str, analysis_type: str = "general") -> Dict[str, Any]:
         """
         Analyze text and provide insights using AI with tool integration.
+        Shows detailed internal process of tool selection and execution.
         
         Args:
             text: Text content to analyze
@@ -629,6 +718,13 @@ Error: {result['result'].get('error', 'Unknown error')}
         Returns:
             Analysis results with insights as a dictionary
         """
+        print("🤖 AGENT STARTING ANALYSIS")
+        print("=" * 50)
+        print(f"📝 Text to analyze: {text[:100]}{'...' if len(text) > 100 else ''}")
+        print(f"🎯 Analysis type: {analysis_type}")
+        print(f"🔧 Available tools: {self.available_tools}")
+        print(f"📋 Tool context loaded: {bool(self.tool_context)}")
+        
         try:
             import aisuite as ai
             from dotenv import load_dotenv
@@ -637,32 +733,41 @@ Error: {result['result'].get('error', 'Unknown error')}
             client = ai.Client()
             
             # Use the enhanced system prompt generation
+            print("\n🧠 AGENT AI PROCESSING: Building system prompt with tool context...")
             system_prompt = self._build_system_prompt(analysis_type)
+            print(f"   📝 System prompt built with {len(self.available_tools)} tools")
             
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Analyze this text:\n{text}"}
             ]
             
+            print("   🚀 Sending request to AI model...")
             response = client.chat.completions.create(
                 model="openai:gpt-4o",
                 messages=messages,
                 temperature=0.1
             )
             
+            response_text = response.choices[0].message.content
+            print(f"   ✅ AI response received: {len(response_text)} characters")
 
             # Process AI response and handle tool calls if present
-            result = self._process_ai_response(response.choices[0].message.content, analysis_type)
-
-
+            print("\n" + "="*50)
+            result = self._process_ai_response(response_text, analysis_type)
+            print("="*50)
 
             # If tool calls are requested, execute them and generate final analysis
             if result.get("status") == "tool_requested" and "tool_calls" in result:
+                print(f"\n🚀 AGENT WORKFLOW: Tool execution required ({len(result['tool_calls'])} tools)")
                 return self._execute_tools_and_analyze(result["tool_calls"], text, analysis_type, client, messages)
+            else:
+                print("\n📄 AGENT WORKFLOW: No tools needed, returning direct analysis")
             
             return result
             
         except Exception as e:
+            print(f"\n❌ AGENT ERROR: {str(e)}")
             return {
                 "error": f"Error analyzing text: {str(e)}",
                 "analysis_type": analysis_type,
