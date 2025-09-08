@@ -23,18 +23,23 @@ class StepPlanner:
         self.tool_descriptions = tool_descriptions or {}
         self.ai_client = AIClientWrapper()
     
-    def check_for_continuation(self, accumulated_context: str, original_text: str) -> str:
+    def check_for_continuation(self, accumulated_context: str, original_text: str, previous_failures: int = 0) -> str:
         """
         Check if the AI wants to continue with more tool executions based on current progress.
         
         Args:
             accumulated_context: Context from previous steps
             original_text: Original request text
+            previous_failures: Number of consecutive failures
             
         Returns:
             AI response indicating next steps
         """
         tool_context = self._build_tool_context() if self.available_tools else ""
+        
+        # Check for repeated failures - stop if tools are failing
+        if previous_failures >= 2:
+            return "COMPLETE - Tools are failing, stopping execution"
         
         continuation_prompt = f"""You are continuing a multi-step calculation/analysis. 
 
@@ -48,8 +53,9 @@ ORIGINAL REQUEST: {original_text}
 INSTRUCTIONS:
 1. Look at the original request and current progress
 2. Determine if more tool executions are needed to complete the request
-3. If yes, provide the next tool call(s) needed
-4. If no, respond with "COMPLETE" 
+3. If tools are failing repeatedly, respond with "COMPLETE" 
+4. If yes, provide the next tool call(s) needed
+5. If no, respond with "COMPLETE" 
 
 If more tools are needed, respond with a JSON object containing the tool_call:
 {{
@@ -60,7 +66,7 @@ If more tools are needed, respond with a JSON object containing the tool_call:
     "reasoning": "Why this tool is needed next"
 }}
 
-If the task is complete, just respond with: "COMPLETE"
+If the task is complete or tools are failing, just respond with: "COMPLETE"
 """
 
         try:
