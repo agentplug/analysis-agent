@@ -36,7 +36,7 @@ class ToolExecutor:
             enabled: Whether to allow local fallback execution
         """
         self.mcp_client.allow_fallback = enabled
-        print(f"🔧 MCP fallback {'enabled' if enabled else 'disabled'}")
+        print(f"🔧 MCP fallback {'enabled' if enabled else 'disabled'}", file=sys.stderr)
     
     def execute_tools_workflow(self, tool_calls: List[Dict[str, Any]], text: str, 
                              analysis_type: str, client, messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -67,7 +67,7 @@ class ToolExecutor:
             remaining_tool_calls = tool_calls.copy()
             
             while remaining_tool_calls and current_step <= max_steps:
-                print(f"\n🔄 MULTI-STEP EXECUTION: Step {current_step}")
+                print(f"\n🔄 MULTI-STEP EXECUTION: Step {current_step}", file=sys.stderr)
                 
                 # Execute current batch of tool calls
                 step_results = []
@@ -101,10 +101,10 @@ class ToolExecutor:
                     consecutive_failures = 0
                 else:
                     consecutive_failures += 1
-                    print(f"   ⚠️ Step {current_step} failed (consecutive failures: {consecutive_failures})")
+                    print(f"   ⚠️ Step {current_step} failed (consecutive failures: {consecutive_failures})", file=sys.stderr)
                 
                 # Check if we need to continue with more steps
-                print(f"   🤔 Checking if more steps are needed after step {current_step}...")
+                print(f"   🤔 Checking if more steps are needed after step {current_step}...", file=sys.stderr)
                 
                 # Import here to avoid circular imports
                 from ..planning.step_planner import StepPlanner
@@ -117,14 +117,14 @@ class ToolExecutor:
                 remaining_tool_calls = parser.extract_tool_calls(continuation_response)
                 
                 if remaining_tool_calls:
-                    print(f"   ✅ Found {len(remaining_tool_calls)} more tools to execute in next step")
+                    print(f"   ✅ Found {len(remaining_tool_calls)} more tools to execute in next step", file=sys.stderr)
                     current_step += 1
                 else:
-                    print(f"   🏁 No more steps needed. Proceeding to final analysis.")
+                    print(f"   🏁 No more steps needed. Proceeding to final analysis.", file=sys.stderr)
                     break
             
             if current_step > max_steps:
-                print(f"   ⚠️ Reached maximum steps limit ({max_steps})")
+                print(f"   ⚠️ Reached maximum steps limit ({max_steps})", file=sys.stderr)
             
             # Build context with all tool results
             tool_context_info = self._build_tool_results_context(all_tool_results)
@@ -195,13 +195,13 @@ Use this information to provide a complete analysis that includes the final calc
         tool_name = tool_call["tool_name"]
         arguments = tool_call.get("arguments", {})
         
-        print(f"🔧 AGENT TOOL EXECUTION: Starting execution of '{tool_name}'")
-        print(f"   📝 Arguments: {arguments}")
-        print(f"   🔐 Available tools: {self.available_tools}")
+        print(f"🔧 AGENT TOOL EXECUTION: Starting execution of '{tool_name}'", file=sys.stderr)
+        print(f"   📝 Arguments: {arguments}", file=sys.stderr)
+        print(f"   🔐 Available tools: {self.available_tools}", file=sys.stderr)
         
         # CRITICAL SECURITY CHECK: Double-verify tool is authorized
         if not self.validator.validate_tool_call(tool_call):
-            print(f"   ❌ AUTHORIZATION FAILED: Tool '{tool_name}' not in assigned tools")
+            print(f"   ❌ AUTHORIZATION FAILED: Tool '{tool_name}' not in assigned tools", file=sys.stderr)
             return {
                 "success": False,
                 "tool_name": tool_name,
@@ -209,14 +209,14 @@ Use this information to provide a complete analysis that includes the final calc
                 "error": f"UNAUTHORIZED: Tool '{tool_name}' is not in assigned tools list: {self.available_tools}"
             }
         
-        print(f"   ✅ AUTHORIZATION PASSED: Tool '{tool_name}' is authorized")
+        print(f"   ✅ AUTHORIZATION PASSED: Tool '{tool_name}' is authorized", file=sys.stderr)
         
         try:
-            print(f"   🚀 EXECUTING: Calling MCP server for '{tool_name}'...")
+            print(f"   🚀 EXECUTING: Calling MCP server for '{tool_name}'...", file=sys.stderr)
             # Execute real tools by calling MCP server
             result = self.mcp_client.call_tool(tool_name, arguments)
-            print(f"   ✅ EXECUTION SUCCESS: Got result from '{tool_name}'")
-            print(f"   📊 Result: {result}")
+            print(f"   ✅ EXECUTION SUCCESS: Got result from '{tool_name}'", file=sys.stderr)
+            print(f"   📊 Result: {result}", file=sys.stderr)
             
             return {
                 "success": True,
@@ -225,7 +225,7 @@ Use this information to provide a complete analysis that includes the final calc
                 "result": result
             }
         except Exception as e:
-            print(f"   ❌ EXECUTION FAILED: Error in '{tool_name}': {str(e)}")
+            print(f"   ❌ EXECUTION FAILED: Error in '{tool_name}': {str(e)}", file=sys.stderr)
             return {
                 "success": False,
                 "tool_name": tool_name,

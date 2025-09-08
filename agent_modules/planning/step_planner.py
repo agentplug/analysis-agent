@@ -4,6 +4,7 @@ Step Planner Module
 Handles dynamic step-by-step planning and continuation logic.
 """
 
+import sys
 from typing import Dict, Any, List
 from ..utils.ai_client import AIClientWrapper
 
@@ -75,11 +76,11 @@ If the task is complete or tools are failing, just respond with: "COMPLETE"
                 "What should be the next step?"
             )
             
-            print(f"   🧠 Continuation check response: {response_text[:100]}...")
+            print(f"   🧠 Continuation check response: {response_text[:100]}...", file=sys.stderr)
             return response_text
             
         except Exception as e:
-            print(f"   ⚠️ Error checking continuation: {e}")
+            print(f"   ⚠️ Error checking continuation: {e}", file=sys.stderr)
             return "COMPLETE"
     
     def build_step_context(self, step: Dict[str, Any], previous_results: Dict[int, Any], 

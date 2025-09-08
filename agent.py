@@ -95,7 +95,7 @@ class ModularAnalysisAgent(BaseAgent):
             }
             
         except Exception as e:
-            print(f"\n❌ PROBLEM SOLVING ERROR: {str(e)}")
+            log_print(f"\n❌ PROBLEM SOLVING ERROR: {str(e)}")
             return {
                 "error": f"Error solving problem: {str(e)}",
                 "problem": problem,
@@ -261,7 +261,7 @@ class ModularAnalysisAgent(BaseAgent):
         
         for i, step in enumerate(steps):
             step_num = step.get('step_number', i + 1)
-            print(f"\n   🔄 EXECUTING STEP {step_num}: {step['description']}")
+            log_print(f"\n   🔄 EXECUTING STEP {step_num}: {step['description']}")
             
             # Build context with previous results
             step_context = self.step_planner.build_step_context(step, accumulated_results, original_problem, context)
@@ -279,11 +279,11 @@ class ModularAnalysisAgent(BaseAgent):
                 "tools_used": step_result.get("tools_used", [])
             })
             
-            print(f"   ✅ Step {step_num} completed: {step_result.get('status', 'success')}")
+            log_print(f"   ✅ Step {step_num} completed: {step_result.get('status', 'success')}")
             
             # If step failed, decide whether to continue or stop
             if step_result.get("status") == "error":
-                print(f"   ⚠️ Step {step_num} failed, but continuing with remaining steps...")
+                log_print(f"   ⚠️ Step {step_num} failed, but continuing with remaining steps...")
         
         return execution_results
     
@@ -302,7 +302,7 @@ class ModularAnalysisAgent(BaseAgent):
             # Build step-specific system prompt
             system_prompt = self.step_planner.build_step_execution_prompt(step)
             
-            print(f"      🧠 AI executing step: {step.get('type', 'general')}")
+            log_print(f"      🧠 AI executing step: {step.get('type', 'general')}")
             response_text = self.ai_client.generate_response(system_prompt, step_context)
             
             # Process AI response and handle tool calls if present
@@ -310,7 +310,7 @@ class ModularAnalysisAgent(BaseAgent):
             
             # If tool calls are requested, execute them
             if result.get("status") == "tool_requested" and "tool_calls" in result:
-                print(f"      🔧 Step requires {len(result['tool_calls'])} tools")
+                log_print(f"      🔧 Step requires {len(result['tool_calls'])} tools")
                 tool_result = self.tool_executor.execute_tools_workflow(
                     result["tool_calls"], step_context, "step_execution", 
                     self.ai_client._get_client(), []
