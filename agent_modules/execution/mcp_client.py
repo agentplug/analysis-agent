@@ -12,14 +12,16 @@ from typing import Dict, Any
 class MCPClient:
     """Handles MCP server communication and local fallback execution."""
     
-    def __init__(self, server_url: str = "http://localhost:8000/sse"):
+    def __init__(self, server_url: str = "http://localhost:8000/sse", allow_fallback: bool = False):
         """
         Initialize MCP client.
         
         Args:
             server_url: URL of the MCP server
+            allow_fallback: Whether to allow local fallback when MCP server is unavailable
         """
         self.server_url = server_url
+        self.allow_fallback = allow_fallback
     
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """
@@ -46,9 +48,13 @@ class MCPClient:
                 return asyncio.run(self._execute_tool_via_sse(tool_name, arguments))
                 
         except Exception as e:
-            # If MCP fails, fall back to local execution
-            print(f"MCP tool execution failed, using local fallback: {e}")
-            return self._execute_tool_locally(tool_name, arguments)
+            # Check if fallback is allowed
+            if self.allow_fallback:
+                print(f"MCP tool execution failed, using local fallback: {e}")
+                return self._execute_tool_locally(tool_name, arguments)
+            else:
+                print(f"❌ MCP SERVER UNAVAILABLE: {e}")
+                raise Exception(f"MCP server is unavailable and fallback is disabled. Error: {str(e)}")
     
     async def _execute_tool_via_sse(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """
