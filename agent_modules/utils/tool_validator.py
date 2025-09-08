@@ -4,7 +4,13 @@ Tool Validator Module
 Handles validation of tool calls and authorization checks.
 """
 
+import sys
 from typing import Dict, Any, List
+
+# Custom print function to avoid JSON parsing issues
+def log_print(*args, **kwargs):
+    """Print to stderr to avoid interfering with JSON output"""
+    print(*args, file=sys.stderr, **kwargs)
 
 
 class ToolValidator:
@@ -30,31 +36,31 @@ class ToolValidator:
             True if tool call is valid and allowed, False otherwise
         """
         if not isinstance(tool_call, dict):
-            print(f"❌ Invalid tool call: not a dictionary")
+            log_print(f"❌ Invalid tool call: not a dictionary")
             return False
         
         if "tool_name" not in tool_call:
-            print(f"❌ Invalid tool call: missing 'tool_name'")
+            log_print(f"❌ Invalid tool call: missing 'tool_name'")
             return False
         
         if not isinstance(tool_call["tool_name"], str):
-            print(f"❌ Invalid tool call: 'tool_name' must be string")
+            log_print(f"❌ Invalid tool call: 'tool_name' must be string")
             return False
         
         tool_name = tool_call["tool_name"]
         
         # CRITICAL: Ensure tool is in the assigned tools list
         if tool_name not in self.available_tools:
-            print(f"❌ UNAUTHORIZED TOOL ACCESS: '{tool_name}' is not in assigned tools: {self.available_tools}")
+            log_print(f"❌ UNAUTHORIZED TOOL ACCESS: '{tool_name}' is not in assigned tools: {self.available_tools}")
             return False
         
         # Validate arguments structure
         if "arguments" in tool_call:
             if not isinstance(tool_call["arguments"], dict):
-                print(f"❌ Invalid tool call: 'arguments' must be dictionary")
+                log_print(f"❌ Invalid tool call: 'arguments' must be dictionary")
                 return False
         
-        print(f"✅ Tool call validated: '{tool_name}' is authorized")
+        log_print(f"✅ Tool call validated: '{tool_name}' is authorized")
         return True
     
     def is_tool_authorized(self, tool_name: str) -> bool:

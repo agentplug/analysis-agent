@@ -8,6 +8,11 @@ import json
 import sys
 from typing import Dict, Any, List, Optional
 
+# Custom print function to avoid JSON parsing issues
+def log_print(*args, **kwargs):
+    """Print to stderr to avoid interfering with JSON output"""
+    print(*args, file=sys.stderr, **kwargs)
+
 # Import modular components
 from agent_modules.core.base_agent import BaseAgent
 from agent_modules.planning.problem_decomposer import ProblemDecomposer
@@ -40,7 +45,7 @@ class ModularAnalysisAgent(BaseAgent):
         self.response_parser = ResponseParser()
         self.ai_client = AIClientWrapper()
         
-        print(f"🤖 Modular Analysis Agent initialized with {len(self.available_tools)} tools")
+        log_print(f"🤖 Modular Analysis Agent initialized with {len(self.available_tools)} tools")
     
     def solve_problem(self, problem: str, context: str = "") -> Dict[str, Any]:
         """
@@ -53,30 +58,30 @@ class ModularAnalysisAgent(BaseAgent):
         Returns:
             Complete solution with step-by-step execution results
         """
-        print("🧩 AGENT PROBLEM SOLVING MODE")
-        print("=" * 60)
-        print(f"📝 Problem: {problem}")
-        print(f"📋 Context: {context if context else 'None provided'}")
-        print(f"🔧 Available tools: {self.available_tools}")
+        print("🧩 AGENT PROBLEM SOLVING MODE", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        print(f"📝 Problem: {problem}", file=sys.stderr)
+        print(f"📋 Context: {context if context else 'None provided'}", file=sys.stderr)
+        print(f"🔧 Available tools: {self.available_tools}", file=sys.stderr)
         
         try:
             # Step 1: Break down the problem into steps
-            print("\n🔍 STEP 1: Problem Decomposition")
+            print("\n🔍 STEP 1: Problem Decomposition", file=sys.stderr)
             steps = self.problem_decomposer.decompose_problem(problem, context)
             
             if not steps or "error" in steps:
                 return steps
             
-            print(f"   ✅ Problem broken into {len(steps['steps'])} steps")
+            print(f"   ✅ Problem broken into {len(steps['steps'])} steps", file=sys.stderr)
             for i, step in enumerate(steps['steps'], 1):
-                print(f"   {i}. {step['description']}")
+                print(f"   {i}. {step['description']}", file=sys.stderr)
             
             # Step 2: Execute each step
-            print(f"\n🚀 STEP 2: Sequential Step Execution")
+            print(f"\n🚀 STEP 2: Sequential Step Execution", file=sys.stderr)
             execution_results = self._execute_problem_steps(steps['steps'], problem, context)
             
             # Step 3: Aggregate results
-            print(f"\n📊 STEP 3: Result Aggregation")
+            print(f"\n📊 STEP 3: Result Aggregation", file=sys.stderr)
             final_solution = self.result_aggregator.aggregate_step_results(execution_results, problem, steps['steps'])
             
             return {
@@ -108,46 +113,46 @@ class ModularAnalysisAgent(BaseAgent):
         Returns:
             Analysis results with insights as a dictionary
         """
-        print("🤖 AGENT STARTING ANALYSIS")
-        print("=" * 50)
-        print(f"📝 Text to analyze: {text[:100]}{'...' if len(text) > 100 else ''}")
-        print(f"🎯 Analysis type: {analysis_type}")
-        print(f"🔧 Available tools: {self.available_tools}")
-        print(f"📋 Tool context loaded: {bool(self.tool_context)}")
+        log_print("🤖 AGENT STARTING ANALYSIS")
+        log_print("=" * 50)
+        log_print(f"📝 Text to analyze: {text[:100]}{'...' if len(text) > 100 else ''}")
+        log_print(f"🎯 Analysis type: {analysis_type}")
+        log_print(f"🔧 Available tools: {self.available_tools}")
+        log_print(f"📋 Tool context loaded: {bool(self.tool_context)}")
         
         try:
             # Use the enhanced system prompt generation
-            print("\n🧠 AGENT AI PROCESSING: Building system prompt with tool context...")
+            log_print("\n🧠 AGENT AI PROCESSING: Building system prompt with tool context...")
             system_prompt = self._build_system_prompt(analysis_type)
-            print(f"   📝 System prompt built with {len(self.available_tools)} tools")
+            log_print(f"   📝 System prompt built with {len(self.available_tools)} tools")
             
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Analyze this text:\n{text}"}
             ]
             
-            print("   🚀 Sending request to AI model...")
+            log_print("   🚀 Sending request to AI model...")
             response_text = self.ai_client.generate_response_with_messages(messages)
-            print(f"   ✅ AI response received: {len(response_text)} characters")
+            log_print(f"   ✅ AI response received: {len(response_text)} characters")
 
             # Process AI response and handle tool calls if present
-            print("\n" + "="*50)
+            log_print("\n" + "="*50)
             result = self._process_ai_response(response_text, analysis_type)
-            print("="*50)
+            log_print("="*50)
 
             # If tool calls are requested, execute them and generate final analysis
             if result.get("status") == "tool_requested" and "tool_calls" in result:
-                print(f"\n🚀 AGENT WORKFLOW: Tool execution required ({len(result['tool_calls'])} tools)")
+                log_print(f"\n🚀 AGENT WORKFLOW: Tool execution required ({len(result['tool_calls'])} tools)")
                 return self.tool_executor.execute_tools_workflow(
                     result["tool_calls"], text, analysis_type, self.ai_client._get_client(), messages
                 )
             else:
-                print("\n📄 AGENT WORKFLOW: No tools needed, returning direct analysis")
+                log_print("\n📄 AGENT WORKFLOW: No tools needed, returning direct analysis")
             
             return result
             
         except Exception as e:
-            print(f"\n❌ AGENT ERROR: {str(e)}")
+            log_print(f"\n❌ AGENT ERROR: {str(e)}")
             return {
                 "error": f"Error analyzing text: {str(e)}",
                 "analysis_type": analysis_type,

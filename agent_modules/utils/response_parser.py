@@ -6,7 +6,13 @@ Handles parsing of AI responses to extract tool calls and structured data.
 
 import json
 import re
+import sys
 from typing import List, Dict, Any
+
+# Custom print function to avoid JSON parsing issues
+def log_print(*args, **kwargs):
+    """Print to stderr to avoid interfering with JSON output"""
+    print(*args, file=sys.stderr, **kwargs)
 
 
 class ResponseParser:
@@ -26,8 +32,8 @@ class ResponseParser:
         Returns:
             List of tool call dictionaries
         """
-        print("🔍 AGENT TOOL SELECTION: Analyzing AI response for tool calls...")
-        print(f"   📝 Response length: {len(response)} characters")
+        log_print("🔍 AGENT TOOL SELECTION: Analyzing AI response for tool calls...")
+        log_print(f"   📝 Response length: {len(response)} characters")
         
         tool_calls = []
         
@@ -36,11 +42,11 @@ class ResponseParser:
             full_response = json.loads(response)
             if "tool_call" in full_response:
                 tool_call = full_response["tool_call"]
-                print(f"   ✅ Found tool call in JSON: {tool_call}")
+                log_print(f"   ✅ Found tool call in JSON: {tool_call}")
                 tool_calls.append(tool_call)
                 return tool_calls
         except json.JSONDecodeError:
-            print("   📋 Response is not pure JSON, searching for embedded tool calls...")
+            log_print("   📋 Response is not pure JSON, searching for embedded tool calls...")
         
         # Check for JSON wrapped in markdown code blocks
         json_pattern = r'```json\s*(\{.*?\})\s*```'
@@ -50,7 +56,7 @@ class ResponseParser:
                 json_obj = json.loads(json_match)
                 if "tool_call" in json_obj:
                     tool_call = json_obj["tool_call"]
-                    print(f"   ✅ Found tool call in markdown JSON: {tool_call}")
+                    log_print(f"   ✅ Found tool call in markdown JSON: {tool_call}")
                     tool_calls.append(tool_call)
             except json.JSONDecodeError:
                 continue
@@ -61,13 +67,13 @@ class ResponseParser:
         for i, line in enumerate(lines):
             line = line.strip()
             if '"tool_call"' in line:
-                print(f"   🔍 Found 'tool_call' in line {i+1}: {line[:100]}...")
+                log_print(f"   🔍 Found 'tool_call' in line {i+1}: {line[:100]}...")
                 try:
                     # Try to parse the line as JSON
                     obj = json.loads(line)
                     if "tool_call" in obj:
                         tool_call = obj["tool_call"]
-                        print(f"   ✅ Extracted tool call: {tool_call}")
+                        log_print(f"   ✅ Extracted tool call: {tool_call}")
                         tool_calls.append(tool_call)
                 except json.JSONDecodeError:
                     # If the line isn't complete JSON, try to find JSON within it
@@ -78,15 +84,15 @@ class ResponseParser:
                             tool_call_obj = json.loads(match)
                             if "tool_call" in tool_call_obj:
                                 tool_call = tool_call_obj["tool_call"]
-                                print(f"   ✅ Extracted tool call from pattern: {tool_call}")
+                                log_print(f"   ✅ Extracted tool call from pattern: {tool_call}")
                                 tool_calls.append(tool_call)
                         except json.JSONDecodeError:
                             continue
         
-        print(f"🎯 TOOL SELECTION RESULT: Found {len(tool_calls)} tool calls")
+        log_print(f"🎯 TOOL SELECTION RESULT: Found {len(tool_calls)} tool calls")
         for i, tool_call in enumerate(tool_calls, 1):
-            print(f"   {i}. Tool: {tool_call.get('tool_name', 'unknown')}")
-            print(f"      Args: {tool_call.get('arguments', {})}")
+            log_print(f"   {i}. Tool: {tool_call.get('tool_name', 'unknown')}")
+            log_print(f"      Args: {tool_call.get('arguments', {})}")
         
         return tool_calls
     
