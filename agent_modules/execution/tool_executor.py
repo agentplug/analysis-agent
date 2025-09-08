@@ -5,6 +5,7 @@ Handles tool execution, validation, and multi-step workflows.
 """
 
 import asyncio
+import sys
 import concurrent.futures
 from typing import Dict, Any, List
 from ..utils.tool_validator import ToolValidator
@@ -25,7 +26,17 @@ class ToolExecutor:
         self.available_tools = available_tools or []
         self.tool_descriptions = tool_descriptions or {}
         self.validator = ToolValidator(self.available_tools)
-        self.mcp_client = MCPClient()
+        self.mcp_client = MCPClient(allow_fallback=False)  # Disable fallback by default
+    
+    def set_fallback_enabled(self, enabled: bool):
+        """
+        Enable or disable local fallback when MCP server is unavailable.
+        
+        Args:
+            enabled: Whether to allow local fallback execution
+        """
+        self.mcp_client.allow_fallback = enabled
+        print(f"🔧 MCP fallback {'enabled' if enabled else 'disabled'}")
     
     def execute_tools_workflow(self, tool_calls: List[Dict[str, Any]], text: str, 
                              analysis_type: str, client, messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -47,6 +58,7 @@ class ToolExecutor:
             all_tool_results = []
             current_step = 1
             max_steps = 10  # Prevent infinite loops
+            consecutive_failures = 0  # Track consecutive tool failures
             
             # Keep track of accumulated results for context
             accumulated_context = f"Original request: {text}\n\n"
@@ -59,9 +71,11 @@ class ToolExecutor:
                 
                 # Execute current batch of tool calls
                 step_results = []
+                step_has_success = False
+                
                 for tool_call in remaining_tool_calls:
                     tool_result = self.execute_single_tool(tool_call)
-                    print(f"\033[91m🔧 AGENT TOOL EXECUTION: Tool result: {tool_result}\033[0m")
+                    print(f"\033[91m🔧 AGENT TOOL EXECUTION: Tool result: {tool_result}\033[0m", file=sys.stderr)
                     step_result = {
                         "tool_name": tool_call["tool_name"],
                         "arguments": tool_call.get("arguments", {}),
@@ -72,10 +86,22 @@ class ToolExecutor:
                     step_results.append(step_result)
                     all_tool_results.append(step_result)
                     
-                    # Add result to accumulated context
+                    # Track if any tool in this step succeeded
                     if step_result["success"]:
+                        step_has_success = True
                         result_value = self._extract_tool_result_value(tool_result)
                         accumulated_context += f"Step {current_step}: {tool_call['tool_name']}({tool_call.get('arguments', {})}) = {result_value}\n"
+                    else:
+                        # Add failure info to context
+                        error_msg = tool_result.get("error", "Unknown error")
+                        accumulated_context += f"Step {current_step}: {tool_call['tool_name']} FAILED - {error_msg}\n"
+                
+                # Update consecutive failure counter
+                if step_has_success:
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures += 1
+                    print(f"   ⚠️ Step {current_step} failed (consecutive failures: {consecutive_failures})")
                 
                 # Check if we need to continue with more steps
                 print(f"   🤔 Checking if more steps are needed after step {current_step}...")
@@ -83,7 +109,7 @@ class ToolExecutor:
                 # Import here to avoid circular imports
                 from ..planning.step_planner import StepPlanner
                 step_planner = StepPlanner(self.available_tools, self.tool_descriptions)
-                continuation_response = step_planner.check_for_continuation(accumulated_context, text)
+                continuation_response = step_planner.check_for_continuation(accumulated_context, text, consecutive_failures)
                 
                 # Extract any new tool calls from continuation response
                 from ..utils.response_parser import ResponseParser
