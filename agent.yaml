@@ -40,7 +40,9 @@ interface:
         description: "Summarized content"
 
 dependencies: 
-  - "aisuite[openai]>=0.1.7"
-  - "python-dotenv>=1.0.0"
+  - "aisuite[openai]>=0.1.11"
+  - "python-dotenv>=1.1.1"
+  - "docstring-parser>=0.17.0"
+  - "mcp>=1.14.0"
 
 tags: ["text-analysis", "insights", "ai-assistant"]
