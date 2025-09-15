@@ -1,0 +1,24 @@
+{
+    "ai": {
+        "model": "openai:gpt-4o-mini",
+        "temperature": 0.0,
+        "max_tokens": null,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+    },
+    "analysis": {
+        "default_analysis_type": "general",
+        "max_summary_length": 200,
+        "enable_streaming": false
+    },
+    "execution": {
+        "timeout_seconds": 30,
+        "max_retries": 3,
+        "retry_delay": 1.0
+    },
+    "logging": {
+        "level": "INFO",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }
+}

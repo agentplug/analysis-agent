@@ -7,6 +7,7 @@ Handles text analysis and insights generation.
 from typing import Dict, Any
 from ..utils.ai_client import AIClientWrapper
 from ..utils.response_parser import ResponseParser
+from ..utils.config_loader import get_analysis_config
 
 
 class TextAnalyzer:
@@ -16,20 +17,24 @@ class TextAnalyzer:
         """Initialize text analyzer."""
         self.ai_client = AIClientWrapper()
         self.parser = ResponseParser()
+        self.analysis_config = get_analysis_config()
     
-    def analyze_text(self, text: str, analysis_type: str = "general", tool_context: str = "") -> Dict[str, Any]:
+    def analyze_text(self, text: str, analysis_type: str = None, tool_context: str = "") -> Dict[str, Any]:
         """
         Analyze text and provide insights using AI.
         
         Args:
             text: Text content to analyze
-            analysis_type: Type of analysis (sentiment, key_points, summary, general)
+            analysis_type: Type of analysis (sentiment, key_points, summary, general). If None, uses config default.
             tool_context: Additional tool context information
             
         Returns:
             Analysis results as a dictionary
         """
         try:
+            # Use config default if analysis_type is not provided
+            if analysis_type is None:
+                analysis_type = self.analysis_config.get('default_analysis_type', 'general')
             # Build system prompt based on analysis type
             system_prompt = self._build_analysis_prompt(analysis_type, tool_context)
             
@@ -56,18 +61,21 @@ class TextAnalyzer:
                 "status": "error"
             }
     
-    def summarize_content(self, content: str, max_length: int = 200) -> str:
+    def summarize_content(self, content: str, max_length: int = None) -> str:
         """
         Create a summary of content using AI.
         
         Args:
             content: Content to summarize
-            max_length: Maximum summary length
+            max_length: Maximum summary length. If None, uses config default.
             
         Returns:
             Summarized content as a string
         """
         try:
+            # Use config default if max_length is not provided
+            if max_length is None:
+                max_length = self.analysis_config.get('max_summary_length', 200)
             system_prompt = f"""You are a content summarizer. Create a concise summary of the content in approximately {max_length} characters or less. Focus on the main ideas and key information."""
             
             return self.ai_client.generate_response(
