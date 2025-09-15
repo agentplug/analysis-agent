@@ -5,6 +5,12 @@ author: "agentplug"
 license: "MIT"
 python_version: "3.11+"
 
+installation:
+  commands:
+    - "uv pip install -e ."
+    - "uv pip install -r requirements.txt"
+  description: "Install the analysis agent and its dependencies using pip or uv"
+
 interface:
   methods:
     analyze_text:
@@ -39,10 +45,5 @@ interface:
         type: "string"
         description: "Summarized content"
 
-dependencies: 
-  - "aisuite[openai]>=0.1.11"
-  - "python-dotenv>=1.1.1"
-  - "docstring-parser>=0.17.0"
-  - "mcp>=1.14.0"
 
 tags: ["text-analysis", "insights", "ai-assistant"]
