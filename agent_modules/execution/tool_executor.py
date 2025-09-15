@@ -156,12 +156,21 @@ Use this information to provide a complete analysis that includes the final calc
             # Parse and return final analysis
             try:
                 import json
-                final_analysis = json.loads(final_response.choices[0].message.content)
-                # Add tool information to the result
+                response_content = final_response.choices[0].message.content
+                
+                # Clean up markdown code blocks if present
+                if "```json" in response_content:
+                    response_content = response_content.replace("```json", "").replace("```", "").strip()
+                elif "```" in response_content:
+                    response_content = response_content.replace("```", "").strip()
+                
+                final_analysis = json.loads(response_content)
+                # Add tool information to the result with consistent format
                 final_analysis["tool_results"] = all_tool_results
                 final_analysis["tools_used"] = [tr["tool_name"] for tr in all_tool_results if tr["success"]]
                 final_analysis["total_steps"] = current_step
                 final_analysis["accumulated_context"] = accumulated_context
+                final_analysis["status"] = "success"
                 return final_analysis
             except json.JSONDecodeError:
                 return {
@@ -178,6 +187,10 @@ Use this information to provide a complete analysis that includes the final calc
             return {
                 "error": f"Error executing tools and analyzing: {str(e)}",
                 "analysis_type": analysis_type,
+                "tool_results": [],
+                "tools_used": [],
+                "total_steps": 0,
+                "accumulated_context": "",
                 "status": "error"
             }
     
@@ -215,15 +228,27 @@ Use this information to provide a complete analysis that includes the final calc
             print(f"   🚀 EXECUTING: Calling MCP server for '{tool_name}'...", file=sys.stderr)
             # Execute real tools by calling MCP server
             result = self.mcp_client.call_tool(tool_name, arguments)
-            print(f"   ✅ EXECUTION SUCCESS: Got result from '{tool_name}'", file=sys.stderr)
-            print(f"   📊 Result: {result}", file=sys.stderr)
+            print(f"   📊 Raw result: {result}", file=sys.stderr)
             
-            return {
-                "success": True,
-                "tool_name": tool_name,
-                "arguments": arguments,
-                "result": result
-            }
+            # Check if the result contains error indicators
+            is_error = self._is_error_result(result)
+            
+            if is_error:
+                print(f"   ❌ EXECUTION FAILED: Result contains error", file=sys.stderr)
+                return {
+                    "success": False,
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                    "error": str(result)
+                }
+            else:
+                print(f"   ✅ EXECUTION SUCCESS: Got valid result from '{tool_name}'", file=sys.stderr)
+                return {
+                    "success": True,
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                    "result": result
+                }
         except Exception as e:
             print(f"   ❌ EXECUTION FAILED: Error in '{tool_name}': {str(e)}", file=sys.stderr)
             return {
@@ -232,6 +257,41 @@ Use this information to provide a complete analysis that includes the final calc
                 "arguments": arguments,
                 "error": f"Tool execution failed: {str(e)}"
             }
+    
+    def _is_error_result(self, result: Any) -> bool:
+        """
+        Check if a tool execution result indicates an error.
+        
+        Args:
+            result: The result from tool execution
+            
+        Returns:
+            True if the result indicates an error, False otherwise
+        """
+        if result is None:
+            return True
+        
+        # Convert to string for analysis
+        result_str = str(result).lower()
+        
+        # Check for common error indicators
+        error_indicators = [
+            "error executing tool",
+            "validation error",
+            "field required",
+            "missing",
+            "invalid",
+            "failed",
+            "exception",
+            "traceback",
+            "pydantic",
+            "type=missing",
+            "input_value=",
+            "for further information visit"
+        ]
+        
+        # If any error indicator is found, it's an error
+        return any(indicator in result_str for indicator in error_indicators)
     
     def _extract_tool_result_value(self, tool_result: Dict[str, Any]) -> str:
         """Extract the actual result value from a tool execution result."""
