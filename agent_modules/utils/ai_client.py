@@ -10,7 +10,7 @@ from typing import List, Dict
 class AIClientWrapper:
     """Wrapper for AI client to handle different providers and configurations."""
     
-    def __init__(self, model: str = "openai:gpt-4o", temperature: float = 0.1):
+    def __init__(self, model: str = "openai:gpt-4o", temperature: float = 0.0):
         """
         Initialize AI client wrapper.
         
