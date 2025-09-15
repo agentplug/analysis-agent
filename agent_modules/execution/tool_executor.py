@@ -148,7 +148,7 @@ Use this information to provide a complete analysis that includes the final calc
             ]
             
             final_response = client.chat.completions.create(
-                model="openai:gpt-4o",
+                model="openai:gpt-4o-mini",
                 messages=final_messages,
                 temperature=0.0
             )
