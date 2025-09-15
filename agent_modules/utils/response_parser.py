@@ -62,29 +62,57 @@ class ResponseParser:
                 continue
         
         # Look for JSON objects containing tool_call in the response
-        # Use a more flexible approach to find JSON objects
-        lines = response.split('\n')
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if '"tool_call"' in line:
-                log_print(f"   🔍 Found 'tool_call' in line {i+1}: {line[:100]}...")
+        # Use a more flexible approach to find JSON objects - try to extract complete JSON blocks
+        if '"tool_call"' in response:
+            log_print("   🔍 Found 'tool_call' in response, attempting comprehensive JSON extraction...")
+            
+            # Try to find complete JSON objects that contain tool_call
+            # Look for patterns like { ... "tool_call": { ... } ... }
+            json_blocks = []
+            
+            # Find all potential JSON blocks in the response
+            brace_count = 0
+            start_pos = -1
+            
+            for i, char in enumerate(response):
+                if char == '{':
+                    if brace_count == 0:
+                        start_pos = i
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0 and start_pos != -1:
+                        # Found a complete JSON block
+                        json_candidate = response[start_pos:i+1]
+                        if '"tool_call"' in json_candidate:
+                            json_blocks.append(json_candidate)
+                        start_pos = -1
+            
+            # Try to parse each JSON block
+            for json_block in json_blocks:
                 try:
-                    # Try to parse the line as JSON
-                    obj = json.loads(line)
+                    obj = json.loads(json_block)
                     if "tool_call" in obj:
                         tool_call = obj["tool_call"]
-                        log_print(f"   ✅ Extracted tool call: {tool_call}")
+                        log_print(f"   ✅ Extracted tool call from JSON block: {tool_call}")
                         tool_calls.append(tool_call)
+                        break  # Found one, that's enough for now
                 except json.JSONDecodeError:
-                    # If the line isn't complete JSON, try to find JSON within it
-                    json_pattern = r'\{[^{}]*"tool_call"[^{}]*\}'
-                    matches = re.findall(json_pattern, line)
-                    for match in matches:
+                    continue
+            
+            # Fallback: line-by-line search for simpler cases
+            if not tool_calls:
+                lines = response.split('\n')
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    if '"tool_call"' in line:
+                        log_print(f"   🔍 Found 'tool_call' in line {i+1}: {line[:100]}...")
                         try:
-                            tool_call_obj = json.loads(match)
-                            if "tool_call" in tool_call_obj:
-                                tool_call = tool_call_obj["tool_call"]
-                                log_print(f"   ✅ Extracted tool call from pattern: {tool_call}")
+                            # Try to parse the line as JSON
+                            obj = json.loads(line)
+                            if "tool_call" in obj:
+                                tool_call = obj["tool_call"]
+                                log_print(f"   ✅ Extracted tool call: {tool_call}")
                                 tool_calls.append(tool_call)
                         except json.JSONDecodeError:
                             continue
