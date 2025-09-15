@@ -94,7 +94,7 @@ To use a tool, respond with a JSON object containing:
 {{
     "tool_call": {{
         "tool_name": "tool_name",
-        "arguments": {{"param1": "value1", "param2": "value2"}}
+        "arguments": {{"a": "value1", "b": "value2"}}
     }},
     "analysis": "I will use the tool to perform this operation"
 }}

@@ -171,10 +171,12 @@ To use a tool, respond with a JSON object containing the tool_call:
 {{
     "tool_call": {{
         "tool_name": "tool_name",
-        "arguments": {{"param1": "value1", "param2": "value2"}}
+        "arguments": {{"a": "value1", "b": "value2"}}
     }},
     "reasoning": "Why this tool is needed"
 }}
+
+IMPORTANT: Use parameter names like "a", "b" for mathematical operations, or specific parameter names as appropriate for each tool type.
 """
     
     def _extract_result_summary(self, result: Dict[str, Any]) -> str:
