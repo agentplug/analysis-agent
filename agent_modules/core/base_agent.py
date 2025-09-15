@@ -78,21 +78,17 @@ Examples: {', '.join(examples)}
 """)
         
         return f"""
-You have access to the following tools. CRITICAL RULE: You MUST use the tools for ALL mathematical operations that match your available tools. Do NOT calculate anything manually.
+You have access to the following tools. CRITICAL RULE: You MUST use the available tools whenever the task requires their functionality.
 
 {''.join(tool_descriptions)}
 
 MANDATORY RULES:
-1. If text asks for multiplication and you have "multiply" tool → USE IT
-2. If text asks for addition and you have "add" tool → USE IT  
+1. If text asks for information that requires web search and you have "web_search" tool → USE IT
+2. If text asks for mathematical calculations and you have math tools → USE THEM
 3. If text has multiple operations → PERFORM THEM STEP BY STEP
 4. NEVER calculate manually if you have the corresponding tool
-5. Always use tools for ALL calculations, even simple ones
-
-For multi-step calculations like "multiply 12 by 5, then add 8":
-- FIRST: Use multiply tool for 12 × 5  
-- The system will execute this and give you the result
-- THEN: You'll be asked to continue with the next step
+5. NEVER search manually if you have the web_search tool
+6. Always use tools for ALL operations they can handle
 
 To use a tool, respond with a JSON object containing:
 {{
@@ -100,20 +96,22 @@ To use a tool, respond with a JSON object containing:
         "tool_name": "tool_name",
         "arguments": {{"param1": "value1", "param2": "value2"}}
     }},
-    "analysis": "I will use the tool to perform this calculation"
+    "analysis": "I will use the tool to perform this operation"
 }}
 
 EXAMPLES:
 - "Calculate 6 times 7" → {{"tool_call": {{"tool_name": "multiply", "arguments": {{"a": "6", "b": "7"}}}}}}
 - "Add 5 and 3" → {{"tool_call": {{"tool_name": "add", "arguments": {{"a": "5", "b": "3"}}}}}}  
-- "Calculate 12 times 5, then add 8" → {{"tool_call": {{"tool_name": "multiply", "arguments": {{"a": "12", "b": "5"}}}}}}
+- "Who is the richest person?" → {{"tool_call": {{"tool_name": "web_search", "arguments": {{"query": "richest person in the world 2025"}}}}}}
+- "Weather in Tokyo" → {{"tool_call": {{"tool_name": "web_search", "arguments": {{"query": "weather in Tokyo today"}}}}}}
 
-IMPORTANT: For text like "Calculate 12 times 5, then add 8", you should:
-1. First respond with multiply tool call
-2. When you get the result (60), the system will continue the conversation
-3. Then you'll use the add tool to add 8 to that result
+IMPORTANT: 
+- For mathematical operations, use the math tools
+- For information that needs current data, use web_search
+- For multi-step tasks, handle one step at a time
+- Always format responses as JSON with "tool_call" structure
 
-REMEMBER: If you can use a tool, you MUST use it. Do not calculate manually.
+REMEMBER: If you can use a tool for the task, you MUST use it. Do not provide manual answers when tools are available.
 """
     
     def get_tool_info(self) -> Dict[str, Any]:
