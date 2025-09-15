@@ -156,6 +156,10 @@ class ModularAnalysisAgent(BaseAgent):
             return {
                 "error": f"Error analyzing text: {str(e)}",
                 "analysis_type": analysis_type,
+                "tool_results": [],
+                "tools_used": [],
+                "total_steps": 0,
+                "accumulated_context": "",
                 "status": "error"
             }
     
@@ -207,6 +211,10 @@ class ModularAnalysisAgent(BaseAgent):
             return {
                 "error": "Invalid tool context structure",
                 "analysis_type": analysis_type,
+                "tool_results": [],
+                "tools_used": [],
+                "total_steps": 0,
+                "accumulated_context": "",
                 "status": "error"
             }
         
@@ -230,17 +238,41 @@ class ModularAnalysisAgent(BaseAgent):
                 return {
                     "error": f"Invalid tool calls found: {validation_result['invalid_calls']}",
                     "analysis_type": analysis_type,
+                    "tool_results": [],
+                    "tools_used": [],
+                    "total_steps": 0,
+                    "accumulated_context": "",
                     "status": "error"
                 }
         
-        # No tool calls, return normal analysis
+        # No tool calls, return normal analysis with consistent format
         try:
-            analysis_result = json.loads(response)
+            # Clean up markdown code blocks if present
+            response_content = response
+            if "```json" in response_content:
+                response_content = response_content.replace("```json", "").replace("```", "").strip()
+            elif "```" in response_content:
+                response_content = response_content.replace("```", "").strip()
+            
+            analysis_result = json.loads(response_content)
+            # Ensure consistent output format even without tools
+            if isinstance(analysis_result, dict):
+                # Add missing fields to match tool output format
+                analysis_result.setdefault("tool_results", [])
+                analysis_result.setdefault("tools_used", [])
+                analysis_result.setdefault("total_steps", 0)
+                analysis_result.setdefault("accumulated_context", "")
+                analysis_result.setdefault("status", "success")
             return analysis_result
         except json.JSONDecodeError:
+            # Return consistent format even for non-JSON responses
             return {
                 "analysis_type": analysis_type,
                 "result": response,
+                "tool_results": [],
+                "tools_used": [],
+                "total_steps": 0,
+                "accumulated_context": "",
                 "status": "success"
             }
     
