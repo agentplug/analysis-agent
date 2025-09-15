@@ -58,6 +58,12 @@ class ResponseParser:
                     tool_call = json_obj["tool_call"]
                     log_print(f"   ✅ Found tool call in markdown JSON: {tool_call}")
                     tool_calls.append(tool_call)
+                    # Return early to avoid duplicates
+                    log_print(f"🎯 TOOL SELECTION RESULT: Found {len(tool_calls)} tool calls")
+                    for i, tc in enumerate(tool_calls, 1):
+                        log_print(f"   {i}. Tool: {tc.get('tool_name', 'unknown')}")
+                        log_print(f"      Args: {tc.get('arguments', {})}")
+                    return tool_calls
             except json.JSONDecodeError:
                 continue
         
@@ -96,7 +102,12 @@ class ResponseParser:
                         tool_call = obj["tool_call"]
                         log_print(f"   ✅ Extracted tool call from JSON block: {tool_call}")
                         tool_calls.append(tool_call)
-                        break  # Found one, that's enough for now
+                        # Return early to avoid duplicates
+                        log_print(f"🎯 TOOL SELECTION RESULT: Found {len(tool_calls)} tool calls")
+                        for i, tc in enumerate(tool_calls, 1):
+                            log_print(f"   {i}. Tool: {tc.get('tool_name', 'unknown')}")
+                            log_print(f"      Args: {tc.get('arguments', {})}")
+                        return tool_calls
                 except json.JSONDecodeError:
                     continue
             
@@ -114,6 +125,12 @@ class ResponseParser:
                                 tool_call = obj["tool_call"]
                                 log_print(f"   ✅ Extracted tool call: {tool_call}")
                                 tool_calls.append(tool_call)
+                                # Return early to avoid duplicates
+                                log_print(f"🎯 TOOL SELECTION RESULT: Found {len(tool_calls)} tool calls")
+                                for i, tc in enumerate(tool_calls, 1):
+                                    log_print(f"   {i}. Tool: {tc.get('tool_name', 'unknown')}")
+                                    log_print(f"      Args: {tc.get('arguments', {})}")
+                                return tool_calls
                         except json.JSONDecodeError:
                             continue
         
