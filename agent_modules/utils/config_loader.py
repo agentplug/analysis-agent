@@ -29,17 +29,17 @@ class ConfigLoader:
         self.config_path = Path(config_path)
         self._config: Optional[Dict[str, Any]] = None
 
-        def _load_model_name(self) -> str:
-            if os.getenv("OPENAI_API_KEY"):
-                return "openai:gpt-4.1"
-            elif os.getenv("ANTHROPIC_API_KEY"):
-                return "anthropic:claude-3.5-sonnet"
-            elif os.getenv("GOOGLE_API_KEY"):
-                return "google:gemini-2.0-flash"
-            elif os.getenv("DEEPSEEK_API_KEY"):
-                return "deepseek:deepseek-chat"
-            else:
-                return "openai:gpt-4.1"
+    def _load_model_name(self) -> str:
+        if os.getenv("OPENAI_API_KEY"):
+            return "openai:gpt-4.1"
+        elif os.getenv("ANTHROPIC_API_KEY"):
+            return "anthropic:claude-3.5-sonnet"
+        elif os.getenv("GOOGLE_API_KEY"):
+            return "google:gemini-2.0-flash"
+        elif os.getenv("DEEPSEEK_API_KEY"):
+            return "deepseek:deepseek-chat"
+        else:
+            return "openai:gpt-4.1"
     
     def load_config(self) -> Dict[str, Any]:
         """
