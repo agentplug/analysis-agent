@@ -38,6 +38,8 @@ class ConfigLoader:
             return "google:gemini-2.0-flash"
         elif os.getenv("DEEPSEEK_API_KEY"):
             return "deepseek:deepseek-chat"
+        elif os.getenv("FIREWORKS_API_KEY"):
+            return "fireworks:accounts/fireworks/models/llama-v3p2-3b-instruct"
         else:
             return "openai:gpt-4.1"
     
