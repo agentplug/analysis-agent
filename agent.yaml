@@ -7,9 +7,10 @@ python_version: "3.11+"
 
 installation:
   commands:
+    - "pip install uv"
     - "uv pip install -e ."
     - "uv pip install -r requirements.txt"
-  description: "Install the analysis agent and its dependencies using pip or uv"
+  description: "Install uv first, then install the analysis agent and its dependencies"
 
 interface:
   methods:
