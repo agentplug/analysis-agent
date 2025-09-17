@@ -30,18 +30,65 @@ class ConfigLoader:
         self._config: Optional[Dict[str, Any]] = None
 
     def _load_model_name(self) -> str:
+        """
+        Automatically detect and return the best available model based on API keys.
+        Follows aisuite provider format: <provider>:<model-name>
+
+        Returns:
+            str: Model identifier in aisuite format
+        """
+        # Priority order: Check API keys and return corresponding model
+        # OpenAI models
         if os.getenv("OPENAI_API_KEY"):
-            return "openai:gpt-4.1"
+            return "openai:gpt-4o-mini"
+
+        # Anthropic models
         elif os.getenv("ANTHROPIC_API_KEY"):
-            return "anthropic:claude-3.5-sonnet"
+            return "anthropic:claude-3-5-sonnet-20241022"
+
+        # Google models
         elif os.getenv("GOOGLE_API_KEY"):
-            return "google:gemini-2.0-flash"
+            return "google:gemini-1.5-pro"
+
+        # DeepSeek models
         elif os.getenv("DEEPSEEK_API_KEY"):
             return "deepseek:deepseek-chat"
+
+        # Fireworks models
         elif os.getenv("FIREWORKS_API_KEY"):
             return "fireworks:accounts/fireworks/models/llama-v3p2-3b-instruct"
+
+        # Cohere models
+        elif os.getenv("COHERE_API_KEY"):
+            return "cohere:command-r-plus"
+
+        # Mistral models
+        elif os.getenv("MISTRAL_API_KEY"):
+            return "mistral:mistral-large-latest"
+
+        # Groq models
+        elif os.getenv("GROQ_API_KEY"):
+            return "groq:llama-3.1-70b-versatile"
+
+        # Replicate models
+        elif os.getenv("REPLICATE_API_TOKEN"):
+            return "replicate:meta/llama-2-70b-chat"
+
+        # Hugging Face models
+        elif os.getenv("HUGGINGFACE_API_KEY"):
+            return "huggingface:microsoft/DialoGPT-large"
+
+        # AWS Bedrock models
+        elif os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
+            return "aws:anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+        # Azure OpenAI models
+        elif os.getenv("AZURE_OPENAI_API_KEY"):
+            return "azure:gpt-4o"
+
+        # Default fallback
         else:
-            return "openai:gpt-4.1"
+            return "openai:gpt-4o-mini"
     
     def load_config(self) -> Dict[str, Any]:
         """
