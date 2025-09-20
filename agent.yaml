@@ -7,7 +7,7 @@ python_version: "3.11+"
 
 installation:
   commands:
-    - "python -m pip install --upgrade pip && pip install uv || curl -LsSf https://astral.sh/uv/install.sh | sh"
+    - "python -m ensurepip --upgrade && python -m pip install --upgrade pip && pip install uv || curl -LsSf https://astral.sh/uv/install.sh | sh"
     - "uv pip install -e ."
   description: "Install uv (try pip first, fallback to official installer), then install the analysis agent and its dependencies from pyproject.toml"
 
