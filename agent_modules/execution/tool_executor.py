@@ -26,7 +26,7 @@ class ToolExecutor:
         self.available_tools = available_tools or []
         self.tool_descriptions = tool_descriptions or {}
         self.validator = ToolValidator(self.available_tools)
-        self.mcp_client = MCPClient(allow_fallback=False)  # Disable fallback by default
+        self.mcp_client = MCPClient(allow_fallback=True)  # Enable fallback for built-in tools
     
     def set_fallback_enabled(self, enabled: bool):
         """

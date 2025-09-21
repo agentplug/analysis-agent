@@ -50,10 +50,12 @@ class MCPClient:
         except Exception as e:
             # Check if fallback is allowed
             if self.allow_fallback:
-                print(f"MCP tool execution failed, using local fallback: {e}")
+                import sys
+                print(f"MCP tool execution failed, using local fallback: {e}", file=sys.stderr)
                 return self._execute_tool_locally(tool_name, arguments)
             else:
-                print(f"❌ MCP SERVER UNAVAILABLE: {e}")
+                import sys
+                print(f"MCP SERVER UNAVAILABLE: {e}", file=sys.stderr)
                 raise Exception(f"MCP server is unavailable and fallback is disabled. Error: {str(e)}")
     
     async def _execute_tool_via_sse(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
@@ -146,8 +148,10 @@ class MCPClient:
         # Convert arguments to appropriate types
         processed_args = self._process_tool_arguments(arguments)
         
-        # Math operations (support any math tool)
-        if any(keyword in tool_name.lower() for keyword in ['add', 'sum', 'plus', '+']):
+        # Math operations (support any math tool, but not web tools)
+        if any(keyword in tool_name.lower() for keyword in ['add', 'plus', '+']) and not any(web_keyword in tool_name.lower() for web_keyword in ['web_', 'url', 'http']):
+            return self._execute_math_operation('+', processed_args)
+        elif tool_name.lower() == 'sum' or (tool_name.lower().startswith('sum_') and not any(web_keyword in tool_name.lower() for web_keyword in ['web_', 'url', 'http'])):
             return self._execute_math_operation('+', processed_args)
         elif any(keyword in tool_name.lower() for keyword in ['subtract', 'minus', 'sub', '-']):
             return self._execute_math_operation('-', processed_args)
@@ -170,13 +174,17 @@ class MCPClient:
             location = processed_args.get('location', processed_args.get('place', 'Unknown Location'))
             return f"Weather in {location}: Sunny, 22°C (simulated via {tool_name})"
         
-        # Search tools
+        # Web search tools (specific handler for built-in web search)
+        elif any(keyword in tool_name.lower() for keyword in ['web_search', 'websearch']):
+            return self._execute_builtin_web_search(tool_name, processed_args)
+        
+        # Generic search tools (fallback for other search tools)
         elif any(keyword in tool_name.lower() for keyword in ['search', 'find', 'query', 'lookup']):
             query = processed_args.get('query', processed_args.get('q', processed_args.get('search', 'default')))
             return f"Search results for '{query}' (via {tool_name}): [Simulated results]"
         
-        # Data analysis tools
-        elif any(keyword in tool_name.lower() for keyword in ['analyze', 'data', 'stats', 'analyze']):
+        # Data analysis tools (generic, not web-specific)
+        elif any(keyword in tool_name.lower() for keyword in ['data_analyze', 'stats_analyze', 'generic_analyze']) and not any(web_keyword in tool_name.lower() for web_keyword in ['web_', 'url', 'http']):
             data = processed_args.get('data', processed_args.get('input', 'sample data'))
             return f"Analysis of '{data}' completed via {tool_name}: [Key insights found]"
         
@@ -184,6 +192,22 @@ class MCPClient:
         elif any(keyword in tool_name.lower() for keyword in ['file', 'read', 'write', 'save']):
             filename = processed_args.get('filename', processed_args.get('path', 'file.txt'))
             return f"File operation on '{filename}' via {tool_name}: [Operation completed]"
+        
+        # Web scraping tools
+        elif any(keyword in tool_name.lower() for keyword in ['web_scrape', 'scrape', 'extract', 'crawl']):
+            return self._execute_builtin_web_scrape(tool_name, processed_args)
+        
+        # Web analysis tools
+        elif any(keyword in tool_name.lower() for keyword in ['web_analyze', 'web_analysis', 'analyze_web']):
+            return self._execute_builtin_web_analyze(tool_name, processed_args)
+        
+        # Web summarization tools
+        elif any(keyword in tool_name.lower() for keyword in ['web_summarize', 'web_summary', 'summarize_web']):
+            return self._execute_builtin_web_summarize(tool_name, processed_args)
+        
+        # Web search and scrape tools
+        elif any(keyword in tool_name.lower() for keyword in ['web_search_and_scrape', 'search_and_scrape', 'web_search_scrape']):
+            return self._execute_builtin_web_search_and_scrape(tool_name, processed_args)
         
         # Generic tool execution - try to be intelligent about any tool
         else:
@@ -265,6 +289,285 @@ class MCPClient:
             return text.count(target)
         else:
             return f"Text processed via {tool_name}: '{text}'"
+    
+    def _setup_agenthub_import(self):
+        """Setup AgentHub import path for the agent subprocess."""
+        import sys
+        import os
+        
+        # Try to find AgentHub repository dynamically
+        agenthub_path = None
+        
+        # Method 1: Use environment variable if set
+        agenthub_path = os.environ.get("AGENTHUB_PATH")
+        
+        # Method 2: Look for agenthub in current working directory
+        if not agenthub_path:
+            current_dir = os.getcwd()
+            if os.path.exists(os.path.join(current_dir, "agenthub")):
+                agenthub_path = current_dir
+        
+        # Method 3: Look in parent directories (common when running from subdirectories)
+        if not agenthub_path:
+            current_dir = os.getcwd()
+            # Go up to 5 levels to find agenthub directory
+            for _ in range(5):
+                if os.path.exists(os.path.join(current_dir, "agenthub")):
+                    agenthub_path = current_dir
+                    break
+                parent_dir = os.path.dirname(current_dir)
+                if parent_dir == current_dir:  # Reached root
+                    break
+                current_dir = parent_dir
+        
+        # Method 4: Look for agenthub in Python path
+        if not agenthub_path:
+            for path in sys.path:
+                if os.path.exists(os.path.join(path, "agenthub")):
+                    agenthub_path = path
+                    break
+        
+        # Method 5: Look relative to this file's location
+        if not agenthub_path:
+            # This file is in the agent's directory, go up to find agenthub
+            current_file = os.path.abspath(__file__)
+            # Navigate up from agent directory to find agenthub
+            search_path = os.path.dirname(current_file)
+            for _ in range(6):  # Go up 6 levels max
+                if os.path.exists(os.path.join(search_path, "agenthub")):
+                    agenthub_path = search_path
+                    break
+                parent = os.path.dirname(search_path)
+                if parent == search_path:  # Reached root
+                    break
+                search_path = parent
+        
+        # Method 6: Fallback to known relative path from agent directory
+        if not agenthub_path:
+            # Agent is typically in ~/.agenthub/agents/agentplug/analysis-agent/
+            # AgentHub repo should be in ~/repos/agenthub/
+            home_dir = os.path.expanduser("~")
+            potential_path = os.path.join(home_dir, "repos", "agenthub")
+            if os.path.exists(os.path.join(potential_path, "agenthub")):
+                agenthub_path = potential_path
+        
+        # Add to Python path if found
+        if agenthub_path and agenthub_path not in sys.path:
+            sys.path.insert(0, agenthub_path)
+    
+    def _execute_builtin_web_search(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Execute built-in web search tool."""
+        try:
+            # Setup AgentHub import path
+            self._setup_agenthub_import()
+            
+            # Import the web search tool
+            from agenthub.core.tools.builtin.web.search import web_search
+            
+            # Extract query from arguments (handle different parameter names)
+            query = arguments.get('query', arguments.get('q', arguments.get('search', '')))
+            if not query:
+                return {"error": "No search query provided"}
+            
+            # Extract other parameters with defaults
+            engine = arguments.get('engine', 'duckduckgo')
+            max_results = arguments.get('max_results', 10)
+            language = arguments.get('language', 'en')
+            region = arguments.get('region', 'us')
+            time_filter = arguments.get('time_filter', None)
+            safe_search = arguments.get('safe_search', True)
+            include_snippets = arguments.get('include_snippets', True)
+            
+            # Call the actual web search tool
+            result = web_search(
+                query=query,
+                engine=engine,
+                max_results=max_results,
+                language=language,
+                region=region,
+                time_filter=time_filter,
+                safe_search=safe_search,
+                include_snippets=include_snippets
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": f"Web search failed: {str(e)}",
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
+    
+    def _execute_builtin_web_scrape(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Execute built-in web scraping tool."""
+        try:
+            # Setup AgentHub import path
+            self._setup_agenthub_import()
+            
+            # Import the web scrape tool
+            from agenthub.core.tools.builtin.web.scrape import web_scrape
+            
+            # Extract URL from arguments (handle different parameter names)
+            url = arguments.get('url', arguments.get('url_value', arguments.get('target_url', '')))
+            if not url:
+                return {"error": "No URL provided for web scraping"}
+            
+            # Extract other parameters with defaults
+            extract_text = arguments.get('extract_text', True)
+            extract_links = arguments.get('extract_links', False)
+            extract_images = arguments.get('extract_images', False)
+            extract_metadata = arguments.get('extract_metadata', True)
+            timeout = arguments.get('timeout', 10)
+            user_agent = arguments.get('user_agent', arguments.get('user_agent_value', None))
+            follow_redirects = arguments.get('follow_redirects', True)
+            
+            # Call the actual web scrape tool
+            result = web_scrape(
+                url=url,
+                extract_text=extract_text,
+                extract_links=extract_links,
+                extract_images=extract_images,
+                extract_metadata=extract_metadata,
+                timeout=timeout,
+                user_agent=user_agent,
+                follow_redirects=follow_redirects
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": f"Web scraping failed: {str(e)}",
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
+    
+    def _execute_builtin_web_analyze(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Execute built-in web analysis tool."""
+        try:
+            # Setup AgentHub import path
+            self._setup_agenthub_import()
+            
+            # Import the web analyze tool
+            from agenthub.core.tools.builtin.web.analyze import web_analyze
+            
+            # Extract URL from arguments (handle different parameter names)
+            url = arguments.get('url', arguments.get('url_value', arguments.get('target_url', '')))
+            if not url:
+                return {"error": "No URL provided for web analysis"}
+            
+            # Extract other parameters with defaults
+            analysis_types = arguments.get('analysis_types', ['sentiment', 'topics', 'keywords'])
+            extract_sentiment = arguments.get('extract_sentiment', True)
+            extract_topics = arguments.get('extract_topics', True)
+            extract_keywords = arguments.get('extract_keywords', True)
+            extract_entities = arguments.get('extract_entities', True)
+            analyze_readability = arguments.get('analyze_readability', False)
+            detect_language = arguments.get('detect_language', False)
+            timeout = arguments.get('timeout', 15)
+            
+            # Call the actual web analyze tool
+            result = web_analyze(
+                url=url,
+                analysis_types=analysis_types,
+                extract_sentiment=extract_sentiment,
+                extract_topics=extract_topics,
+                extract_keywords=extract_keywords,
+                extract_entities=extract_entities,
+                analyze_readability=analyze_readability,
+                detect_language=detect_language,
+                timeout=timeout
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": f"Web analysis failed: {str(e)}",
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
+    
+    def _execute_builtin_web_summarize(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Execute built-in web summarization tool."""
+        try:
+            # Setup AgentHub import path
+            self._setup_agenthub_import()
+            
+            # Import the web summarize tool
+            from agenthub.core.tools.builtin.web.summarize import web_summarize
+            
+            # Extract URL from arguments (handle different parameter names)
+            url = arguments.get('url', arguments.get('url_value', arguments.get('target_url', '')))
+            if not url:
+                return {"error": "No URL provided for web summarization"}
+            
+            # Extract other parameters with defaults
+            max_length = arguments.get('max_length', 500)
+            language = arguments.get('language', 'en')
+            style = arguments.get('style', 'informative')
+            include_key_points = arguments.get('include_key_points', True)
+            extract_entities = arguments.get('extract_entities', False)
+            
+            # Call the actual web summarize tool
+            result = web_summarize(
+                url=url,
+                max_length=max_length,
+                language=language,
+                style=style,
+                include_key_points=include_key_points,
+                extract_entities=extract_entities
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": f"Web summarization failed: {str(e)}",
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
+    
+    def _execute_builtin_web_search_and_scrape(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Execute built-in web search and scrape tool."""
+        try:
+            # Setup AgentHub import path
+            self._setup_agenthub_import()
+            
+            # Import the web search and scrape tool
+            from agenthub.core.tools.builtin.web.search_and_scrape import web_search_and_scrape
+            
+            # Extract query from arguments (handle different parameter names)
+            query = arguments.get('query', arguments.get('q', arguments.get('search', '')))
+            if not query:
+                return {"error": "No search query provided for search and scrape"}
+            
+            # Extract other parameters with defaults
+            max_results = arguments.get('max_results', 5)
+            engine = arguments.get('engine', 'duckduckgo')
+            extract_text = arguments.get('extract_text', True)
+            extract_metadata = arguments.get('extract_metadata', True)
+            timeout = arguments.get('timeout', 10)
+            
+            # Call the actual web search and scrape tool
+            result = web_search_and_scrape(
+                query=query,
+                max_results=max_results,
+                engine=engine,
+                extract_text=extract_text,
+                extract_metadata=extract_metadata,
+                timeout=timeout
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": f"Web search and scrape failed: {str(e)}",
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
     
     def _execute_generic_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """Generic tool execution for unknown tools."""
