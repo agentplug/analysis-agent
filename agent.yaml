@@ -11,6 +11,7 @@ installation:
     - "python -m pip install --upgrade pip"
     - "pip install uv"
     - "uv pip install -e ."
+    - "uv sync"
   description: "Install uv (try pip first, fallback to official installer), then install the analysis agent and its dependencies from pyproject.toml"
 
 interface:
