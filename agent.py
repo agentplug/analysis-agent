@@ -21,7 +21,7 @@ from agent_modules.execution.tool_executor import ToolExecutor
 from agent_modules.analysis.text_analyzer import TextAnalyzer
 from agent_modules.analysis.result_aggregator import ResultAggregator
 from agent_modules.utils.response_parser import ResponseParser
-from agent_modules.utils.ai_client import AIClientWrapper
+from agent_modules.utils.ai_client import AIClientWrapper, get_shared_ai_client
 
 
 class ModularAnalysisAgent(BaseAgent):
@@ -40,10 +40,10 @@ class ModularAnalysisAgent(BaseAgent):
         self.problem_decomposer = ProblemDecomposer(self.available_tools, self.tool_descriptions)
         self.step_planner = StepPlanner(self.available_tools, self.tool_descriptions)
         self.tool_executor = ToolExecutor(self.available_tools, self.tool_descriptions)
-        self.text_analyzer = TextAnalyzer()
+        self.text_analyzer = TextAnalyzer(use_shared_client=True)
         self.result_aggregator = ResultAggregator()
         self.response_parser = ResponseParser()
-        self.ai_client = AIClientWrapper()
+        self.ai_client = get_shared_ai_client()
         
         log_print(f"🤖 Modular Analysis Agent initialized with {len(self.available_tools)} tools")
     
@@ -144,7 +144,7 @@ class ModularAnalysisAgent(BaseAgent):
             if result.get("status") == "tool_requested" and "tool_calls" in result:
                 log_print(f"\n🚀 AGENT WORKFLOW: Tool execution required ({len(result['tool_calls'])} tools)")
                 return self.tool_executor.execute_tools_workflow(
-                    result["tool_calls"], text, analysis_type, self.ai_client._get_client(), messages
+                    result["tool_calls"], text, analysis_type, self.ai_client.get_raw_client(), messages
                 )
             else:
                 log_print("\n📄 AGENT WORKFLOW: No tools needed, returning direct analysis")
@@ -345,7 +345,7 @@ class ModularAnalysisAgent(BaseAgent):
                 log_print(f"      🔧 Step requires {len(result['tool_calls'])} tools")
                 tool_result = self.tool_executor.execute_tools_workflow(
                     result["tool_calls"], step_context, "step_execution", 
-                    self.ai_client._get_client(), []
+                    self.ai_client.get_raw_client(), []
                 )
                 return {
                     "status": "completed",

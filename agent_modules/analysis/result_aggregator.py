@@ -6,7 +6,7 @@ Handles aggregation of results from multiple steps into final solutions.
 
 import json
 from typing import Dict, Any, List
-from ..utils.ai_client import AIClientWrapper
+from ..utils.ai_client import AIClientWrapper, get_shared_ai_client
 
 
 class ResultAggregator:
@@ -14,7 +14,7 @@ class ResultAggregator:
     
     def __init__(self):
         """Initialize result aggregator."""
-        self.ai_client = AIClientWrapper()
+        self.ai_client = get_shared_ai_client()
     
     def aggregate_step_results(self, execution_results: List[Dict[str, Any]], 
                              problem: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:

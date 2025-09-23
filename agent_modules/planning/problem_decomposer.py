@@ -7,7 +7,7 @@ Handles AI-driven problem decomposition and step planning.
 import json
 import re
 from typing import Dict, Any, List
-from ..utils.ai_client import AIClientWrapper
+from ..utils.ai_client import AIClientWrapper, get_shared_ai_client
 
 
 class ProblemDecomposer:
@@ -23,7 +23,7 @@ class ProblemDecomposer:
         """
         self.available_tools = available_tools or []
         self.tool_descriptions = tool_descriptions or {}
-        self.ai_client = AIClientWrapper()
+        self.ai_client = get_shared_ai_client()
     
     def decompose_problem(self, problem: str, context: str = "") -> Dict[str, Any]:
         """

@@ -5,7 +5,7 @@ Handles text analysis and insights generation.
 """
 
 from typing import Dict, Any
-from ..utils.ai_client import AIClientWrapper
+from ..utils.ai_client import AIClientWrapper, get_shared_ai_client
 from ..utils.response_parser import ResponseParser
 from ..utils.config_loader import get_analysis_config
 
@@ -13,9 +13,17 @@ from ..utils.config_loader import get_analysis_config
 class TextAnalyzer:
     """Handles text analysis and insights generation."""
     
-    def __init__(self):
-        """Initialize text analyzer."""
-        self.ai_client = AIClientWrapper()
+    def __init__(self, use_shared_client: bool = True):
+        """
+        Initialize text analyzer.
+        
+        Args:
+            use_shared_client: Whether to use shared AI client instance to avoid duplicate model detection logs
+        """
+        if use_shared_client:
+            self.ai_client = get_shared_ai_client()
+        else:
+            self.ai_client = AIClientWrapper()
         self.parser = ResponseParser()
         self.analysis_config = get_analysis_config()
     
@@ -38,10 +46,11 @@ class TextAnalyzer:
             # Build system prompt based on analysis type
             system_prompt = self._build_analysis_prompt(analysis_type, tool_context)
             
-            # Generate AI response
+            # Generate AI response with JSON format
             response_text = self.ai_client.generate_response(
                 system_prompt,
-                f"Analyze this text:\n{text}"
+                f"Analyze this text:\n{text}",
+                return_json=True
             )
             
             # Parse the response

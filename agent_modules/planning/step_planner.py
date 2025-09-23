@@ -6,7 +6,7 @@ Handles dynamic step-by-step planning and continuation logic.
 
 import sys
 from typing import Dict, Any, List
-from ..utils.ai_client import AIClientWrapper
+from ..utils.ai_client import AIClientWrapper, get_shared_ai_client
 
 
 class StepPlanner:
@@ -22,7 +22,7 @@ class StepPlanner:
         """
         self.available_tools = available_tools or []
         self.tool_descriptions = tool_descriptions or {}
-        self.ai_client = AIClientWrapper()
+        self.ai_client = get_shared_ai_client()
     
     def check_for_continuation(self, accumulated_context: str, original_text: str, previous_failures: int = 0) -> str:
         """
