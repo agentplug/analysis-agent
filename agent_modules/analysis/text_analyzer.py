@@ -49,8 +49,7 @@ class TextAnalyzer:
             # Generate AI response with JSON format
             response_text = self.ai_client.generate_response(
                 system_prompt,
-                f"Analyze this text:\n{text}",
-                return_json=True
+                f"Analyze this text:\n{text}"
             )
             
             # Parse the response
