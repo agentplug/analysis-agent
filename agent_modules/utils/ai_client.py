@@ -41,11 +41,11 @@ class ModelConfig:
     
     # Model family scoring (higher = better for agentic tasks)
     FAMILY_SCORES = {
-        "gpt-oss": 60,  # OpenAI's open-weight models (highest priority)
-        "deepseek": 50,
-        "gemma": 35,
+        "qwen": 60,      # Highest priority
+        "deepseek": 60,  # Equal highest priority
+        "gpt-oss": 50,   # High priority
         "llama": 40,
-        "qwen": 50,
+        "gemma": 35,
         "mistral": 35,
         "codellama": 30,
         "phind": 25,
@@ -57,16 +57,18 @@ class ModelConfig:
     
     # Size scoring (larger is generally better)
     SIZE_SCORES = {
-        "120b": 120,
-        "70b": 100,
-        "65b": 95,
-        "32b": 80,
-        "latest": 80,
-        "20b": 75,
-        "13b": 60,
-        "7b": 40,
-        "3b": 20,
-        "1b": 10,
+        "120b": 60,
+        "70b": 60,
+        "65b": 55,
+        "32b": 50,
+        "20b": 45,
+        "13b": 45,
+        "8b": 40,
+        "latest": 40,  # Latest type equals 8B
+        "7b": 35,
+        "4b": 35,      # Added 4B support
+        "3b": 35,
+        "1b": 30,
     }
     
     # Common Ollama URLs for auto-detection
@@ -177,8 +179,22 @@ class AIClientWrapper:
         return None
 
     def _detect_running_local_model(self) -> Optional[str]:
-        """Detect running local models with auto-detection."""
-        # Check if Ollama is available
+        """Detect running local models with auto-detection (preferring Ollama)."""
+        # Try Ollama first (preferred)
+        ollama_model = self._detect_ollama_model()
+        if ollama_model:
+            return ollama_model
+        
+        # Fallback to LM Studio if Ollama not available
+        lmstudio_model = self._detect_lmstudio_model()
+        if lmstudio_model:
+            return lmstudio_model
+
+        logger.debug("No local models detected")
+        return None
+
+    def _detect_ollama_model(self) -> Optional[str]:
+        """Detect Ollama models."""
         ollama_url = self._detect_ollama_url()
 
         if self._check_ollama_available(ollama_url):
@@ -188,12 +204,30 @@ class AIClientWrapper:
                 best_model = self._select_best_ollama_model(models)
                 selected_model = f"ollama:{best_model}"
                 logger.info(
-                    f"🤖 Local model detected: {selected_model} "
+                    f"🤖 Ollama model detected: {selected_model} "
                     f"(from {len(models)} available models)"
                 )
                 return selected_model
+        return None
 
-        logger.debug("No local models detected")
+    def _detect_lmstudio_model(self) -> Optional[str]:
+        """Detect LM Studio models as fallback."""
+        lmstudio_urls = [
+            "http://localhost:1234",  # LM Studio default port
+            "http://localhost:8080",  # Alternative port
+        ]
+        
+        for url in lmstudio_urls:
+            if self._check_lmstudio_available(url):
+                models = self._get_lmstudio_models(url)
+                if models:
+                    best_model = self._select_best_model(models, is_lmstudio=True)
+                    selected_model = f"lmstudio:{best_model}"
+                    logger.info(
+                        f"🤖 LM Studio model detected: {selected_model} "
+                        f"(from {len(models)} available models)"
+                    )
+                    return selected_model
         return None
 
     def _detect_ollama_url(self) -> str:
@@ -242,6 +276,41 @@ class AIClientWrapper:
             pass
         return []
 
+    def _check_lmstudio_available(self, url: str) -> bool:
+        """Check if LM Studio is running at the given URL."""
+        try:
+            import requests
+
+            # If URL already has /v1, use it directly, otherwise add it
+            if url.endswith("/v1"):
+                models_url = f"{url}/models"
+            else:
+                models_url = f"{url}/v1/models"
+            
+            response = requests.get(models_url, timeout=1)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def _get_lmstudio_models(self, url: str) -> List[str]:
+        """Get available models from LM Studio."""
+        try:
+            import requests
+
+            # If URL already has /v1, use it directly, otherwise add it
+            if url.endswith("/v1"):
+                models_url = f"{url}/models"
+            else:
+                models_url = f"{url}/v1/models"
+            
+            response = requests.get(models_url, timeout=2)
+            if response.status_code == 200:
+                data = response.json()
+                return [model["id"] for model in data.get("data", [])]
+        except Exception:
+            pass
+        return []
+
     def _select_best_ollama_model(self, available_models: List[Dict]) -> str:
         """Select the best model from available Ollama models."""
         model_names = [model.get("name", "") for model in available_models]
@@ -270,6 +339,33 @@ class AIClientWrapper:
         logger.info(f"🏆 Best model selected: {best_model}")
         return best_model
 
+    def _select_best_model(self, available_models: List[str], is_lmstudio: bool = False) -> str:
+        """Select the best model from available models (unified for Ollama and LM Studio)."""
+        if not available_models:
+            fallback = "llama3:latest" if not is_lmstudio else "meta-llama/llama-3.2-1b-instruct"
+            logger.warning(f"No models available, using fallback: {fallback}")
+            return fallback
+
+        # If only one model, return it
+        if len(available_models) == 1:
+            model_name = available_models[0]
+            logger.info(f"🎯 Single model available: {model_name}")
+            return model_name
+
+        # Score each model and select the best one
+        logger.info(
+            f"🔍 Evaluating {len(available_models)} models: {', '.join(available_models)}"
+        )
+
+        # Log scoring details
+        for model_name in available_models:
+            score = self._calculate_model_score(model_name)
+            logger.debug(f"📊 {model_name}: {score} points")
+
+        best_model = self._score_and_select_best(available_models)
+        logger.info(f"🏆 Best model selected: {best_model}")
+        return best_model
+
     def _score_and_select_best(self, model_names: List[str]) -> str:
         """Score models and return the best one."""
         scored_models = []
@@ -283,7 +379,7 @@ class AIClientWrapper:
         return scored_models[0][0]
 
     def _calculate_model_score(self, model_name: str) -> int:
-        """Calculate a score for a model (higher is better)."""
+        """Calculate a unified score for any model (higher is better)."""
         score = 0
         model_lower = model_name.lower()
 
@@ -299,6 +395,10 @@ class AIClientWrapper:
                 score += points
                 break
 
+        # Platform bonus (Ollama preferred)
+        if self._is_ollama_model(model_name):
+            score += 5
+
         # Penalty for poor models
         poor_indicators = ["tiny", "small", "test", "demo"]
         for indicator in poor_indicators:
@@ -306,11 +406,19 @@ class AIClientWrapper:
                 score -= 30
                 break
 
-        # Bonus for latest/stable versions
-        if "latest" in model_lower or "stable" in model_lower:
+        # Bonus for instruction-tuned models
+        if "instruct" in model_lower:
             score += 10
 
+        # Bonus for chat models
+        if "chat" in model_lower:
+            score += 5
+
         return score
+
+    def _is_ollama_model(self, model_name: str) -> bool:
+        """Check if model is from Ollama platform."""
+        return model_name.startswith("ollama:")
 
     def _get_client(self):
         """Get or create AI client instance with appropriate configuration."""
@@ -323,6 +431,8 @@ class AIClientWrapper:
                 # Initialize client with appropriate configuration
                 if self.model.startswith("ollama:"):
                     self._client = self._initialize_ollama_client()
+                elif self.model.startswith("lmstudio:"):
+                    self._client = self._initialize_lmstudio_client()
                 else:
                     # Cloud models - no special config needed
                     self._client = ai.Client()
@@ -347,6 +457,43 @@ class AIClientWrapper:
                 }
             }
         )
+
+    def _initialize_lmstudio_client(self):
+        """Initialize AISuite client for LM Studio using OpenAI-compatible API."""
+        import aisuite as ai
+        
+        # Get LM Studio configuration
+        api_url = self._detect_lmstudio_url()
+        timeout = int(os.getenv("LMSTUDIO_TIMEOUT", "300"))
+        
+        # LM Studio provides OpenAI-compatible API, so use openai provider with custom base_url
+        return ai.Client(
+            provider_configs={
+                "openai": {
+                    "base_url": api_url,
+                    "timeout": timeout,
+                }
+            }
+        )
+
+    def _detect_lmstudio_url(self) -> str:
+        """Detect LM Studio API URL."""
+        # Check environment variable first
+        if os.getenv("LMSTUDIO_API_URL"):
+            return os.getenv("LMSTUDIO_API_URL")
+        
+        # Check common LM Studio ports
+        lmstudio_urls = [
+            "http://localhost:1234/v1",  # LM Studio default with /v1
+            "http://localhost:8080/v1",  # Alternative port with /v1
+        ]
+        
+        for url in lmstudio_urls:
+            if self._check_lmstudio_available(url):
+                return url
+        
+        # Fallback to default
+        return "http://localhost:1234/v1"
     
     def get_model_info(self) -> ModelInfo:
         """Get detailed information about the current model."""
@@ -359,7 +506,7 @@ class AIClientWrapper:
         provider, model_name = (
             self.model.split(":", 1) if ":" in self.model else ("unknown", self.model)
         )
-        is_local = provider == "ollama"
+        is_local = provider in ["ollama", "lmstudio"]
         score = (
             self._calculate_model_score(model_name) if is_local else 100
         )  # Cloud models get default score
@@ -376,7 +523,7 @@ class AIClientWrapper:
         """List all available models with their information."""
         models = []
 
-        # Check local models
+        # Check Ollama models
         ollama_url = self._detect_ollama_url()
         if self._check_ollama_available(ollama_url):
             ollama_models = self._get_ollama_models(ollama_url)
@@ -392,6 +539,24 @@ class AIClientWrapper:
                         is_available=True,
                     )
                 )
+
+        # Check LM Studio models
+        lmstudio_urls = ["http://localhost:1234", "http://localhost:8080"]
+        for url in lmstudio_urls:
+            if self._check_lmstudio_available(url):
+                lmstudio_models = self._get_lmstudio_models(url)
+                for model_name in lmstudio_models:
+                    score = self._calculate_model_score(model_name)
+                    models.append(
+                        ModelInfo(
+                            name=model_name,
+                            provider="lmstudio",
+                            score=score,
+                            is_local=True,
+                            is_available=True,
+                        )
+                    )
+                break  # Only check first available URL
 
         # Check cloud models
         for env_var, model in ModelConfig.CLOUD_MODELS.items():
@@ -416,8 +581,20 @@ class AIClientWrapper:
         return self.model
 
     def is_local_model(self) -> bool:
-        """Check if current model is local (Ollama)."""
-        return self.model.startswith("ollama:")
+        """Check if current model is local (Ollama or LM Studio)."""
+        return self.model.startswith("ollama:") or self.model.startswith("lmstudio:")
+
+    def _get_actual_model_name(self) -> str:
+        """Get the actual model name for API calls (removes platform prefix)."""
+        if self.model.startswith("ollama:"):
+            # For Ollama, keep the full format for AISuite
+            return self.model  # Keep "ollama:model" format
+        elif self.model.startswith("lmstudio:"):
+            # For LM Studio, use openai provider format
+            model_name = self.model[9:]  # Remove "lmstudio:" prefix
+            return f"openai:{model_name}"
+        else:
+            return self.model
 
     def generate_response(self, system_prompt: str, user_message: str, return_json: bool = False) -> str:
         """
@@ -440,7 +617,7 @@ class AIClientWrapper:
         
         # Prepare parameters for the API call
         params = {
-            "model": self.model,
+            "model": self._get_actual_model_name(),
             "messages": messages,
             "temperature": self.temperature
         }
@@ -481,7 +658,7 @@ class AIClientWrapper:
         
         # Prepare parameters for the API call
         params = {
-            "model": self.model,
+            "model": self._get_actual_model_name(),
             "messages": messages,
             "temperature": self.temperature
         }
