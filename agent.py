@@ -8,11 +8,6 @@ import json
 import sys
 from typing import Dict, Any, List, Optional
 
-# Custom print function to avoid JSON parsing issues
-def log_print(*args, **kwargs):
-    """Print to stderr to avoid interfering with JSON output"""
-    print(*args, file=sys.stderr, **kwargs)
-
 # Import modular components
 from agent_modules.core.base_agent import BaseAgent
 from agent_modules.planning.problem_decomposer import ProblemDecomposer
@@ -21,7 +16,12 @@ from agent_modules.execution.tool_executor import ToolExecutor
 from agent_modules.analysis.text_analyzer import TextAnalyzer
 from agent_modules.analysis.result_aggregator import ResultAggregator
 from agent_modules.utils.response_parser import ResponseParser
-from agent_modules.utils.ai_client import AIClientWrapper, get_shared_ai_client
+from agent_modules.utils.ai_client import get_shared_ai_client
+
+# Custom print function to avoid JSON parsing issues
+def log_print(*args, **kwargs):
+    """Print to stderr to avoid interfering with JSON output"""
+    print(*args, file=sys.stderr, **kwargs)
 
 
 class ModularAnalysisAgent(BaseAgent):
@@ -44,6 +44,16 @@ class ModularAnalysisAgent(BaseAgent):
         self.result_aggregator = ResultAggregator()
         self.response_parser = ResponseParser()
         self.ai_client = get_shared_ai_client()
+        # Log which AI model is being used
+        try:
+            _model_info = self.ai_client.get_model_info()
+            log_print(
+                f"🧩 AI model selected: {_model_info.provider}:{_model_info.name} "
+                f"(local={_model_info.is_local})"
+            )
+        except Exception:
+            # Best-effort logging; continue if model info is unavailable
+            log_print(f"🧩 AI model selected: {self.ai_client.get_current_model()}")
         
         log_print(f"🤖 Modular Analysis Agent initialized with {len(self.available_tools)} tools")
     
@@ -77,11 +87,11 @@ class ModularAnalysisAgent(BaseAgent):
                 print(f"   {i}. {step['description']}", file=sys.stderr)
             
             # Step 2: Execute each step
-            print(f"\n🚀 STEP 2: Sequential Step Execution", file=sys.stderr)
+            print("\n🚀 STEP 2: Sequential Step Execution", file=sys.stderr)
             execution_results = self._execute_problem_steps(steps['steps'], problem, context)
             
             # Step 3: Aggregate results
-            print(f"\n📊 STEP 3: Result Aggregation", file=sys.stderr)
+            print("\n📊 STEP 3: Result Aggregation", file=sys.stderr)
             final_solution = self.result_aggregator.aggregate_step_results(execution_results, problem, steps['steps'])
             
             return {
