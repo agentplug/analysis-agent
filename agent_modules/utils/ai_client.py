@@ -113,10 +113,8 @@ class AIClientWrapper:
             auto_detect: Whether to auto-detect model if not provided
             **kwargs: Additional parameters to override config values
         """
-        # Initialize caching
-        self.cache: Dict[str, Any] = {}
+        # Initialize without caching for fresh detection
         self._model_info: Optional[ModelInfo] = None
-        self._ollama_url_cache: Optional[str] = None
         
         # Load AI configuration
         ai_config = get_ai_config()
@@ -239,36 +237,27 @@ class AIClientWrapper:
         return None
 
     def _detect_ollama_url(self) -> str:
-        """Auto-detect Ollama API URL with fallback options (cached)."""
-        # Return cached URL if available
-        if self._ollama_url_cache is not None:
-            return self._ollama_url_cache
-
+        """Auto-detect Ollama API URL with fallback options (no caching)."""
         # 1. Environment variable (user override)
         if os.getenv("OLLAMA_API_URL"):
             url = os.getenv("OLLAMA_API_URL")
             logger.info(f"🔧 Using Ollama URL from environment: {url}")
-            self._ollama_url_cache = url
             return url
 
         # 2. Try to find running Ollama instance (HTTP check then port check)
         for url in ModelConfig.OLLAMA_URLS:
             if self._check_ollama_available(url):
                 logger.info(f"🔍 Auto-detected Ollama URL (HTTP): {url}")
-                self._ollama_url_cache = url
                 return url
             # Fallback: if HTTP failed, check if port is open
             host = url.split("://", 1)[-1].split(":")[0]
             if self._is_port_open(host, 11434):
                 logger.info(f"🔍 Ollama port open, using URL: {url}")
-                self._ollama_url_cache = url
                 return url
 
         # 3. Default fallback
         logger.debug("Using default Ollama URL: http://localhost:11434")
-        url = "http://localhost:11434"
-        self._ollama_url_cache = url
-        return url
+        return "http://localhost:11434"
 
     def _check_ollama_available(self, url: str) -> bool:
         """Check if Ollama is running at the given URL."""
@@ -815,16 +804,11 @@ class AIClientWrapper:
 # SHARED INSTANCE MANAGEMENT
 # =============================================================================
 
-# Global shared instance to prevent duplicate model detection logs
-_shared_ai_client: Optional[AIClientWrapper] = None
-
-
 def get_shared_ai_client(model: Optional[str] = None, auto_detect: bool = True) -> AIClientWrapper:
     """
-    Get a shared AIClientWrapper instance to avoid duplicate model detection logs.
+    Get a fresh AIClientWrapper instance with no caching.
     
-    This function helps prevent the repetitive Ollama model detection logs that
-    occur when multiple components create their own AIClientWrapper instances.
+    This function creates a new instance every time to ensure fresh model detection.
     
     Args:
         model: Model identifier in format "provider:model-name".
@@ -832,39 +816,16 @@ def get_shared_ai_client(model: Optional[str] = None, auto_detect: bool = True) 
         auto_detect: Whether to auto-detect model if not provided
     
     Returns:
-        Shared AIClientWrapper instance
-    
-    Note:
-        If you need a client with a specific model that differs from the shared
-        instance, create a new AIClientWrapper instance directly.
+        Fresh AIClientWrapper instance
     """
-    global _shared_ai_client
-    
-    # If no shared instance exists, create one
-    if _shared_ai_client is None:
-        _shared_ai_client = AIClientWrapper(model=model, auto_detect=auto_detect)
-        logger.debug("Created shared AIClientWrapper instance")
-        return _shared_ai_client
-    
-    # If shared instance exists but different model requested, create new instance
-    if model and model != _shared_ai_client.model:
-        logger.debug(
-            f"Creating new AIClientWrapper for model {model} "
-            f"(shared has {_shared_ai_client.model})"
-        )
-        return AIClientWrapper(model=model, auto_detect=auto_detect)
-    
-    # Return existing shared instance
-    logger.debug("Reusing shared AIClientWrapper instance")
-    return _shared_ai_client
+    logger.debug("Creating fresh AIClientWrapper instance")
+    return AIClientWrapper(model=model, auto_detect=auto_detect)
 
 
 def reset_shared_ai_client() -> None:
     """
-    Reset the shared AI client instance.
+    No-op function for compatibility.
     
-    Useful for testing or when you want to force re-detection of models.
+    Since we no longer cache instances, this function does nothing.
     """
-    global _shared_ai_client
-    _shared_ai_client = None
-    logger.debug("Reset shared AIClientWrapper instance")
+    logger.debug("No caching - reset not needed")

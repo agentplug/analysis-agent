@@ -11,21 +11,25 @@ The Analysis Agent analyzes text content and provides insights using an enhanced
 ## Enhanced LLM Features
 
 ### Automatic Model Detection
-- **Local Models**: Automatically detects and uses Ollama models when available
+- **Local Models**: Automatically detects and uses Ollama and LM Studio models when available
 - **Cloud Models**: Falls back to cloud providers based on available API keys
 - **Intelligent Scoring**: Selects the best model based on size, family, and quality scores
 - **Smart Fallbacks**: Graceful degradation when models are unavailable
+- **Fresh Detection**: No caching - always detects current model availability
 
 ### Supported Models
-- **Local**: Ollama models (llama3, gemma, qwen, mistral, etc.)
+- **Local**: 
+  - Ollama models (llama3, gemma, qwen, mistral, etc.)
+  - LM Studio models (any compatible model)
 - **Cloud**: OpenAI, Anthropic, Google, DeepSeek, Groq, and more
 - **Auto-Detection**: Automatically finds the best available model
 
 ### Advanced Capabilities
 - **JSON Responses**: Structured output for reliable parsing
-- **Shared Instances**: Prevents duplicate model detection logs
+- **Fresh Model Detection**: Always detects current model state without caching
 - **Comprehensive Logging**: Detailed information about model selection
 - **Error Handling**: Robust fallback mechanisms
+- **Multi-Provider Support**: Seamless switching between local and cloud models
 
 ## Methods
 
@@ -81,7 +85,7 @@ Creates a concise summary of the main ideas and themes.
 - `python-dotenv>=1.1.1` - Environment variable management
 - `docstring-parser>=0.17.0` - Required by aisuite
 - `mcp>=1.14.0` - Model Context Protocol support
-- `requests>=2.31.0` - HTTP requests for Ollama detection
+- `requests>=2.32.5` - HTTP requests for Ollama and LM Studio detection
 
 ## Setup
 
@@ -94,7 +98,12 @@ Creates a concise summary of the main ideas and themes.
 
 2. **Install dependencies:**
    ```bash
-   uv pip install -r requirements.txt
+   uv add -r requirements.txt
+   ```
+   
+   **Note**: If using `uv pip install` instead of `uv add`, ensure `requests` is installed:
+   ```bash
+   uv pip install requests>=2.32.5
    ```
 
 3. **Set up API keys (optional):**
@@ -106,9 +115,12 @@ Creates a concise summary of the main ideas and themes.
    export DEEPSEEK_API_KEY="your-deepseek-key"
    export GROQ_API_KEY="your-groq-key"
    
-   # For local Ollama models
-   # Install Ollama and pull models: ollama pull llama3
-   export OLLAMA_API_URL="http://localhost:11434"  # Optional, auto-detected
+   # For local models (optional - auto-detected)
+   # Ollama: Install Ollama and pull models: ollama pull llama3
+   export OLLAMA_URL="http://localhost:11434"  # Optional, auto-detected
+   
+   # LM Studio: Install LM Studio and load models
+   export LMSTUDIO_URL="http://localhost:1234"  # Optional, auto-detected
    ```
 
 ## Usage
@@ -147,11 +159,16 @@ The agent automatically selects models in this order:
    - Scores models by size and family
    - Prefers larger, higher-quality models
 
-2. **Cloud Models** (fallback)
+2. **Local LM Studio Models** (second priority)
+   - Detects running LM Studio instances
+   - Scores models by size and family
+   - Supports any compatible model
+
+3. **Cloud Models** (fallback)
    - Based on available API keys
    - Supports multiple providers simultaneously
 
-3. **Default Fallback**
+4. **Default Fallback**
    - Uses OpenAI GPT-4o-mini if no other models available
 
 ## Error Handling
@@ -166,8 +183,47 @@ The agent gracefully handles:
 
 All errors are returned in JSON format with an `error` field.
 
+## Troubleshooting
+
+### Common Installation Issues
+
+**Issue**: Agent uses cloud models instead of local models
+- **Cause**: Missing `requests` dependency in virtual environment
+- **Solution**: 
+  ```bash
+  uv add requests>=2.32.5
+  # or
+  uv pip install requests>=2.32.5
+  ```
+
+**Issue**: "ModuleNotFoundError: No module named 'requests'"
+- **Cause**: Virtual environment missing required dependency
+- **Solution**: Install requests as shown above
+
+**Issue**: Local models not detected
+- **Cause**: Ollama/LM Studio not running or wrong URL
+- **Solution**: 
+  - Ensure Ollama is running: `ollama serve`
+  - Ensure LM Studio is running with API enabled
+  - Check URLs: `http://localhost:11434` (Ollama), `http://localhost:1234` (LM Studio)
+
+**Issue**: Different behavior between `python` and full venv path
+- **Cause**: Different Python environments with different dependencies
+- **Solution**: Use consistent environment and ensure all dependencies are installed
+
+### Environment Variables
+
+The agent automatically detects local models, but you can override URLs:
+```bash
+export OLLAMA_URL="http://localhost:11434"
+export LMSTUDIO_URL="http://localhost:1234"
+```
+
 ## Tags
 
 - text-analysis
 - insights
 - ai-assistant
+- local-models
+- ollama
+- lm-studio
