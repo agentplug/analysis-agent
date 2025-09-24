@@ -7,6 +7,8 @@ Inspired by agenthub core LLM service with automatic model detection and local m
 
 import logging
 import os
+import socket
+import json as _json
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from .config_loader import get_ai_config
@@ -197,9 +199,11 @@ class AIClientWrapper:
         """Detect Ollama models."""
         ollama_url = self._detect_ollama_url()
 
+        logger.debug(f"Checking Ollama availability at {ollama_url}")
         if self._check_ollama_available(ollama_url):
             # Get available models
             models = self._get_ollama_models(ollama_url)
+            logger.debug(f"Ollama returned {len(models)} models")
             if models:
                 best_model = self._select_best_ollama_model(models)
                 selected_model = f"ollama:{best_model}"
@@ -208,6 +212,10 @@ class AIClientWrapper:
                     f"(from {len(models)} available models)"
                 )
                 return selected_model
+            else:
+                logger.warning("Ollama is available but returned no models from /api/tags")
+        else:
+            logger.debug("Ollama not reachable or not responding with status 200")
         return None
 
     def _detect_lmstudio_model(self) -> Optional[str]:
@@ -243,10 +251,16 @@ class AIClientWrapper:
             self._ollama_url_cache = url
             return url
 
-        # 2. Try to find running Ollama instance
+        # 2. Try to find running Ollama instance (HTTP check then port check)
         for url in ModelConfig.OLLAMA_URLS:
             if self._check_ollama_available(url):
-                logger.info(f"🔍 Auto-detected Ollama URL: {url}")
+                logger.info(f"🔍 Auto-detected Ollama URL (HTTP): {url}")
+                self._ollama_url_cache = url
+                return url
+            # Fallback: if HTTP failed, check if port is open
+            host = url.split("://", 1)[-1].split(":")[0]
+            if self._is_port_open(host, 11434):
+                logger.info(f"🔍 Ollama port open, using URL: {url}")
                 self._ollama_url_cache = url
                 return url
 
@@ -260,21 +274,92 @@ class AIClientWrapper:
         """Check if Ollama is running at the given URL."""
         try:
             import requests
-            response = requests.get(f"{url}/api/tags", timeout=1)
+            response = requests.get(
+                f"{url}/api/tags",
+                timeout=3,
+                proxies={"http": None, "https": None},  # bypass env proxies for localhost
+            )
             return response.status_code == 200
-        except Exception:
-            return False
+        except Exception as e:
+            logger.debug(f"HTTP check to {url}/api/tags failed: {e}")
+            # Fallback to urllib (no third-party deps)
+            try:
+                import urllib.request
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(f"{url}/api/tags", timeout=3) as resp:
+                    return getattr(resp, "status", 200) == 200
+            except Exception as e2:
+                logger.debug(f"urllib check to {url}/api/tags failed: {e2}")
+            # Fallback to port open check
+            host = url.split("://", 1)[-1].split(":")[0]
+            return self._is_port_open(host, 11434)
 
     def _get_ollama_models(self, url: str) -> List[Dict]:
         """Get available models from Ollama."""
+        # Try requests first
         try:
             import requests
-            response = requests.get(f"{url}/api/tags", timeout=2)
+            response = requests.get(
+                f"{url}/api/tags",
+                timeout=4,
+                headers={"Accept": "application/json"},
+                proxies={"http": None, "https": None},  # bypass env proxies for localhost
+            )
             if response.status_code == 200:
-                return response.json().get("models", [])
-        except Exception:
-            pass
+                try:
+                    data = response.json()
+                except Exception as parse_err:
+                    logger.debug(
+                        f"Failed to parse Ollama /api/tags JSON (len={len(response.text)}): {parse_err}",
+                        exc_info=False,
+                    )
+                    data = None
+                if data is not None:
+                    if isinstance(data, dict) and "models" in data:
+                        return data.get("models", [])
+                    if isinstance(data, list):
+                        return data
+                    logger.debug(
+                        f"Unexpected Ollama /api/tags schema: type={type(data).__name__}; keys={list(data.keys()) if isinstance(data, dict) else 'n/a'}"
+                    )
+        except Exception as e:
+            logger.debug(f"Failed to fetch Ollama models from {url}/api/tags via requests: {e}", exc_info=False)
+
+        # Fallback to urllib (no third-party deps)
+        try:
+            import urllib.request
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(f"{url}/api/tags", timeout=4) as resp:
+                status = getattr(resp, "status", 200)
+                text = resp.read().decode("utf-8", errors="ignore") if status == 200 else ""
+            if status == 200 and text:
+                try:
+                    data = _json.loads(text)
+                except Exception as parse_err:
+                    logger.debug(
+                        f"Failed to parse Ollama /api/tags JSON via urllib (len={len(text)}): {parse_err}",
+                        exc_info=False,
+                    )
+                    return []
+                if isinstance(data, dict) and "models" in data:
+                    return data.get("models", [])
+                if isinstance(data, list):
+                    return data
+                logger.debug(
+                    f"Unexpected Ollama /api/tags schema via urllib: type={type(data).__name__}; keys={list(data.keys()) if isinstance(data, dict) else 'n/a'}"
+                )
+        except Exception as e:
+            logger.debug(f"Failed to fetch Ollama models from {url}/api/tags via urllib: {e}", exc_info=False)
+
         return []
+
+    def _is_port_open(self, host: str, port: int, timeout: float = 0.5) -> bool:
+        """Lightweight TCP check to see if a host:port is accepting connections."""
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except Exception:
+            return False
 
     def _check_lmstudio_available(self, url: str) -> bool:
         """Check if LM Studio is running at the given URL."""
